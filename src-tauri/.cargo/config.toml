@@ -1,0 +1,5 @@
+# ts-rs writes the generated TypeScript here. Setting it in cargo config rather
+# than requiring an env var means `cargo test` regenerates the bindings the same
+# way on every machine, so the CI diff check is meaningful. See ADR-0010.
+[env]
+TS_RS_EXPORT_DIR = { value = "../src/lib/bindings", relative = true }
