@@ -1,5 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Column } from "@/lib/bindings/Column";
@@ -7,6 +8,29 @@ import type { BoardTask } from "@/lib/bindings/BoardTask";
 import { renderWithProviders } from "@/test/render";
 
 import { BoardColumn } from "./BoardColumn";
+
+/**
+ * Stands in for the board, which owns whether this column's composer is open.
+ *
+ * The column is controlled: it reports that the composer should open and is
+ * told when it has. Rendering it against a fixed `composing={false}` would test
+ * a column that can never open one, so the harness holds the state the real
+ * parent holds.
+ */
+function ControlledColumn(props: Omit<React.ComponentProps<typeof BoardColumn>, "composing">) {
+  const [composing, setComposing] = useState(false);
+
+  return (
+    <BoardColumn
+      {...props}
+      composing={composing}
+      onComposingChange={(open) => {
+        setComposing(open);
+        props.onComposingChange(open);
+      }}
+    />
+  );
+}
 
 function column(overrides: Partial<Column> = {}): Column {
   return {
@@ -63,10 +87,11 @@ function setup(overrides: Partial<React.ComponentProps<typeof BoardColumn>> = {}
     onDuplicateTask: vi.fn(),
     onArchiveTask: vi.fn(),
     onDeleteTask: vi.fn(),
+    onComposingChange: vi.fn(),
   };
 
   const view = renderWithProviders(
-    <BoardColumn
+    <ControlledColumn
       column={column()}
       tasks={[]}
       projectPrefix="TKB"
@@ -189,8 +214,10 @@ describe("BoardColumn", () => {
     const long = "Supercalifragilistic ".repeat(30).trim();
     setup({ tasks: [task("t1", long, 1)] });
 
+    // Two lines, not three: the card gained a description excerpt below the
+    // title, and a title allowed to run to three lines pushes it off the card.
     const title = screen.getByTitle(long);
-    expect(title).toHaveClass("line-clamp-3");
+    expect(title).toHaveClass("line-clamp-2");
     expect(title).toHaveClass("break-words");
   });
 
@@ -324,7 +351,7 @@ describe("BoardColumn", () => {
     expect(screen.getByText("Due today")).toBeInTheDocument();
 
     rerender(
-      <BoardColumn
+      <ControlledColumn
         column={column()}
         tasks={[task("t1", "Soon", 1, { dueDate: due })]}
         projectPrefix="TKB"
@@ -334,6 +361,7 @@ describe("BoardColumn", () => {
         otherColumns={[]}
         labels={[]}
         today="2026-07-31"
+        onComposingChange={vi.fn()}
         onCreateTask={vi.fn()}
         onOpenTask={vi.fn()}
         onNudgeTask={vi.fn()}

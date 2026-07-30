@@ -1,9 +1,10 @@
 import { Check, Copy, Eye, Pencil } from "lucide-react";
+import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { notifyError } from "@/app/toast";
-import { IconButton } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
+import { Button, IconButton } from "@/components/ui/Button";
+import { DialogPage } from "@/components/ui/Dialog";
 import type { TaskPatch } from "@/lib/bindings/TaskPatch";
 import { messageFor } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
@@ -120,19 +121,19 @@ export function TaskEditor({ taskId, boardId, projectPrefix, onOpenChange }: Tas
 
   if (detail.isPending) {
     return (
-      <Dialog open onOpenChange={close} title="Task">
-        <p role="status" className="text-fg-secondary text-xs">
+      <DialogPage open onOpenChange={close} title="Task" backLabel="Back to the board">
+        <p role="status" className="text-fg-secondary p-6 text-sm">
           Loading…
         </p>
-      </Dialog>
+      </DialogPage>
     );
   }
 
   if (detail.isError) {
     return (
-      <Dialog open onOpenChange={close} title="Task">
-        <p className="text-danger-fg text-xs">{messageFor(detail.error)}</p>
-      </Dialog>
+      <DialogPage open onOpenChange={close} title="Task" backLabel="Back to the board">
+        <p className="text-danger-fg p-6 text-sm">{messageFor(detail.error)}</p>
+      </DialogPage>
     );
   }
 
@@ -140,10 +141,42 @@ export function TaskEditor({ taskId, boardId, projectPrefix, onOpenChange }: Tas
   const reference = `${projectPrefix}-${String(task.number)}`;
 
   return (
-    <Dialog open onOpenChange={close} title={reference} wide>
+    <DialogPage
+      open
+      onOpenChange={close}
+      backLabel="Back to the board"
+      breadcrumb={
+        <p
+          className="text-fg-secondary font-mono text-2xs tracking-[0.08em] uppercase"
+          data-numeric
+        >
+          {reference}
+        </p>
+      }
+      // The task's own name, not "Edit task". This string is the dialog's
+      // accessible name, and every task having the same one would tell a screen
+      // reader user only that *a* task is open.
+      title={task.title}
+      actions={
+        <>
+          {/* There is no save button by design — see the note on this component.
+              Saying so is cheaper than the button, and stops the missing button
+              reading as a missing feature. */}
+          <span className="text-fg-secondary hidden text-2xs sm:inline">Saves as you type</span>
+          <Button
+            variant="primary"
+            onClick={() => {
+              close(false);
+            }}
+          >
+            Done
+          </Button>
+        </>
+      }
+    >
       <FlushContext value={flushRegistry}>
-        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_15rem]">
-          <div className="min-w-0 space-y-5">
+        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+          <div className="min-w-0 space-y-6">
             <TitleField value={task.title} onSave={save} />
             <DescriptionField value={task.description} onSave={save} />
             <SubtaskList
@@ -163,59 +196,82 @@ export function TaskEditor({ taskId, boardId, projectPrefix, onOpenChange }: Tas
             />
           </div>
 
-          <div className="space-y-5">
-            <ReferenceRow reference={reference} />
-            <PriorityField value={task.priority} onSave={save} />
-            <DueDateField value={task.dueDate} onSave={save} />
-            <EstimateField value={task.estimateMinutes} onSave={save} />
+          <div className="space-y-4">
+            <RailPanel>
+              <ReferenceRow reference={reference} />
+              <PriorityField value={task.priority} onSave={save} />
+              <DueDateField value={task.dueDate} onSave={save} />
+              <EstimateField value={task.estimateMinutes} onSave={save} />
+            </RailPanel>
 
-            <LabelPicker
-              available={availableLabels}
-              selected={labelIds}
-              creating={createLabel.isPending}
-              onChange={(next) => {
-                setLabels.mutate(next, { onError: fail });
-              }}
-              onCreate={(name, color) => {
-                createLabel.mutate({ name, color }, { onError: fail });
-              }}
-            />
+            <RailPanel>
+              <LabelPicker
+                available={availableLabels}
+                selected={labelIds}
+                creating={createLabel.isPending}
+                onChange={(next) => {
+                  setLabels.mutate(next, { onError: fail });
+                }}
+                onCreate={(name, color) => {
+                  createLabel.mutate({ name, color }, { onError: fail });
+                }}
+              />
+            </RailPanel>
 
-            <FileRefList
-              fileRefs={fileRefs}
-              busy={addFile.isPending || relocateFile.isPending || removeFile.isPending}
-              onAdd={() => {
-                void (async () => {
-                  try {
-                    const path = await ipc.pickFile();
-                    if (path !== null) addFile.mutate(path, { onError: fail });
-                  } catch (error) {
-                    fail(error);
-                  }
-                })();
-              }}
-              onLocate={(fileRef) => {
-                void (async () => {
-                  try {
-                    const path = await ipc.pickFile();
-                    if (path !== null)
-                      relocateFile.mutate({ id: fileRef.id, path }, { onError: fail });
-                  } catch (error) {
-                    fail(error);
-                  }
-                })();
-              }}
-              onReveal={(fileRef) => {
-                void ipc.fileRefReveal(fileRef.id).catch(fail);
-              }}
-              onRemove={(fileRef) => {
-                removeFile.mutate(fileRef.id, { onError: fail });
-              }}
-            />
+            <RailPanel>
+              <FileRefList
+                fileRefs={fileRefs}
+                busy={addFile.isPending || relocateFile.isPending || removeFile.isPending}
+                onAdd={() => {
+                  void (async () => {
+                    try {
+                      const path = await ipc.pickFile();
+                      if (path !== null) addFile.mutate(path, { onError: fail });
+                    } catch (error) {
+                      fail(error);
+                    }
+                  })();
+                }}
+                onLocate={(fileRef) => {
+                  void (async () => {
+                    try {
+                      const path = await ipc.pickFile();
+                      if (path !== null)
+                        relocateFile.mutate({ id: fileRef.id, path }, { onError: fail });
+                    } catch (error) {
+                      fail(error);
+                    }
+                  })();
+                }}
+                onReveal={(fileRef) => {
+                  void ipc.fileRefReveal(fileRef.id).catch(fail);
+                }}
+                onRemove={(fileRef) => {
+                  removeFile.mutate(fileRef.id, { onError: fail });
+                }}
+              />
+            </RailPanel>
           </div>
         </div>
       </FlushContext>
-    </Dialog>
+    </DialogPage>
+  );
+}
+
+/**
+ * One group in the editor's right-hand rail.
+ *
+ * The rail was a single run of fields separated by whitespace, which is legible
+ * enough in a 15rem dialog column and stops being legible in a full-height page,
+ * where the run is long and the eye has nothing to rest against. A panel per
+ * group — what the task *is*, what it is labelled, what it points at — gives it
+ * that. The border is the only device used; no shadow, per the one-shadow rule.
+ */
+function RailPanel({ children }: { children: ReactNode }) {
+  return (
+    <div className="border-border-subtle bg-surface-column space-y-4 rounded-xl border p-4">
+      {children}
+    </div>
   );
 }
 

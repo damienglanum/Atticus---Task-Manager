@@ -8,12 +8,17 @@ import { cn } from "@/lib/cn";
  * The name is always rendered, never replaced by its colour (US-14 AC4). The
  * dot is a second signal, not the signal — the same reason priority carries a
  * glyph.
+ *
+ * Set in small caps, which is a typographic choice rather than a change to the
+ * text: `text-transform` does not touch the DOM, so the accessible name is the
+ * name the user typed, in the case they typed it.
  */
 export function LabelChip({ label, className }: { label: Label; className?: string }) {
   return (
     <span
       className={cn(
-        "border-border-subtle bg-surface-sunken text-fg-secondary inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-px text-2xs",
+        "bg-surface-sunken text-fg-secondary inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5",
+        "text-2xs font-medium tracking-[0.06em] uppercase",
         className,
       )}
     >

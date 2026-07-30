@@ -30,6 +30,7 @@ function setup(props: Partial<Parameters<typeof ProjectSidebar>[0]> = {}) {
     onEdit: vi.fn(),
     onArchive: vi.fn(),
     onDelete: vi.fn(),
+    onOpenSettings: vi.fn(),
   };
   render(<ProjectSidebar active={[]} archived={[]} selectedId={null} {...handlers} {...props} />);
   return handlers;

@@ -35,16 +35,24 @@
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
+  /* The v1.0 scale capped everything at 15px, on the reasoning that density is
+     what the board is for. The v1.1 direction keeps that reasoning for the
+     board's own contents — the ceiling below moves by 1px at most — and breaks
+     it only for the two headings that orient you in the window: the page title
+     and the editor's. Those are `--text-xl`, and there are exactly two of them.
+     See docs/design-decisions.md §7. */
   --text-2xs: 0.6875rem; /* 11px — metadata */
   --text-2xs--line-height: 1rem;
-  --text-xs: 0.75rem; /* 12px — column headers, chips */
+  --text-xs: 0.75rem; /* 12px — chips, counts */
   --text-xs--line-height: 1.125rem;
-  --text-sm: 0.8125rem; /* 13px — card titles, body */
-  --text-sm--line-height: 1.35;
-  --text-base: 0.875rem; /* 14px — form controls */
+  --text-sm: 0.8125rem; /* 13px — body, card description */
+  --text-sm--line-height: 1.45;
+  --text-base: 0.875rem; /* 14px — card titles, form controls */
   --text-base--line-height: 1.4;
-  --text-lg: 0.9375rem; /* 15px — the largest text in the app, deliberately */
+  --text-lg: 1rem; /* 16px — section headings inside a panel */
   --text-lg--line-height: 1.35;
+  --text-xl: 1.375rem; /* 22px — the page title, and nothing else */
+  --text-xl--line-height: 1.25;
 
   --font-weight-normal: 400;
   --font-weight-medium: 500;
@@ -53,19 +61,26 @@
   /* ── Spacing — six values, nothing else ─────────────────────────────────── */
   --spacing: 0.25rem; /* 4px base; Tailwind derives p-1 … p-8 from this */
 
-  /* ── Radius ─────────────────────────────────────────────────────────────── */
-  --radius-sm: 2px;
-  --radius-md: 4px;
-  --radius-lg: 8px;
+  /* ── Radius ───────────────────────────────────────────────────────────────
+     Softer than v1.0 across the board. The step between `md` and `lg` is what
+     separates a control from the panel it sits in, so it is deliberately wide. */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
   /* ── Motion ─────────────────────────────────────────────────────────────── */
   --duration-fast: 100ms;
   --duration-base: 160ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* ── Surfaces ───────────────────────────────────────────────────────────── */
-  --color-surface-app: var(--slate-2);
-  --color-surface-column: var(--slate-1);
+  /* ── Surfaces ─────────────────────────────────────────────────────────────
+     v1.0 tinted the page and floated a near-white column on top of it. v1.1
+     inverts that: the canvas is white, and the sidebar and the column panels
+     are the tinted things sitting on it. That is the single change that makes
+     the board read as panels-on-a-page rather than as a wall of cards. */
+  --color-surface-app: #ffffff;
+  --color-surface-column: var(--slate-2);
   --color-surface-card: #ffffff;
   --color-surface-raised: #ffffff;
   --color-surface-sunken: var(--slate-3);
@@ -90,14 +105,28 @@
   --color-border-default: var(--slate-7);
   --color-border-strong: var(--slate-10);
 
-  /* ── Accent — the only saturated colour in the chrome ───────────────────── */
+  /* ── Accent — the only saturated colour in the chrome ─────────────────────
+     Cyan, not indigo. Two of the four steps are pinned rather than taken from
+     the scale, for the reason already recorded beside `--color-danger-solid`:
+     cyan is a high-chroma scale, and Radix tunes its steps with APCA, which
+     diverges from WCAG 2's ratio most in exactly these hues.
+
+     - `solid` carries a white label, so it has to clear 4.5:1 against white in
+       *both* themes — white is white — and cyan 9 (#00a2c7) measures 3.00:1.
+       Pinned to a darker cyan that measures 5.08:1. This is why the buttons are
+       a deeper cyan than a swatch of "brand cyan" would be: the lighter value
+       cannot carry text and stay legible.
+     - `fg` is read as text on the sunken surface and on its own tint, where
+       light cyan 11 measures 4.19:1 and 4.26:1 — both short. Pinned one step
+       darker, to 5.45:1 at worst. Dark cyan 11 has no such problem (7.62:1 at
+       worst) and is used unpinned below. */
   /* The label on a solid fill. A token rather than `text-white` at each call
      site so `contrast.test.ts` measures the value the buttons actually use. */
   --color-on-solid: #ffffff;
-  --color-accent-solid: var(--indigo-9);
-  --color-accent-fg: var(--indigo-11);
-  --color-accent-bg: var(--indigo-3);
-  --color-accent-border: var(--indigo-7);
+  --color-accent-solid: #00779e;
+  --color-accent-fg: #0b6a80;
+  --color-accent-bg: var(--cyan-3);
+  --color-accent-border: var(--cyan-7);
 
   /* ── Status ─────────────────────────────────────────────────────────────── */
   /* Pinned rather than `var(--red-9)`. A solid fill carrying a white label has
@@ -123,11 +152,19 @@
    assignments differ, because a dark UI layers upward from the darkest step
    while a light UI layers a card above a slightly tinted page. */
 .dark {
-  --color-surface-app: var(--slate-1);
-  --color-surface-column: var(--slate-2);
-  --color-surface-card: var(--slate-3);
-  --color-surface-raised: var(--slate-4);
+  --color-surface-app: var(--slate-2);
+  --color-surface-column: var(--slate-3);
+  --color-surface-card: var(--slate-4);
+  /* One step above the card, so the thing being dragged is lighter than the
+     thing it came from. In the light theme both are white and the shadow does
+     that job on its own; in the dark theme a shadow over a dark surface is
+     nearly invisible, so the step has to carry it. */
+  --color-surface-raised: var(--slate-5);
   --color-surface-sunken: var(--slate-1);
+
+  /* Step 11 unpinned here — see the note beside the light values for why the
+     light theme cannot use it. */
+  --color-accent-fg: var(--cyan-11);
 
   /* See the note beside the light value. */
   --color-warning-fg: var(--amber-11);
@@ -135,11 +172,12 @@
 
 @theme {
   /* ── Focus ring — one ring, used identically everywhere ───────────────────
-     Step 11, not the step 9 accent. The ring has to clear 3:1 against whatever
-     it is drawn over, and step 9 fell to 2.77:1 on the raised surface in the
-     dark theme — measured, not assumed. Step 11 is a paired scale, so one
-     token covers both themes: 5.27:1 at worst in light, 7.00:1 in dark. */
-  --color-focus-ring: var(--indigo-11);
+     The accent's text step, not its solid. The ring has to clear 3:1 against
+     whatever it is drawn over, and the solid step falls short on a dark raised
+     surface — measured, not assumed. Deferring to `--color-accent-fg` means the
+     ring inherits the per-theme pinning already argued for above, and there is
+     one fewer value to keep in step: 5.45:1 at worst in light, 7.62:1 in dark. */
+  --color-focus-ring: var(--color-accent-fg);
 }
 
 :root {

@@ -12,7 +12,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useQuery } from "@tanstack/react-query";
 import { Archive, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { notifyError, notifyUndoable } from "@/app/toast";
@@ -59,6 +59,10 @@ interface BoardViewProps {
   boardId: string;
   projectId: string;
   projectPrefix: string;
+  /** Names the board in its own header, above the columns. */
+  projectName: string;
+  /** Board switcher, composed by the shell — it owns the list of boards. */
+  tabs?: ReactNode;
   /** Set by the command palette when a search result is chosen. */
   openTaskId?: string | null;
 }
@@ -67,6 +71,8 @@ export function BoardView({
   boardId,
   projectId,
   projectPrefix,
+  projectName,
+  tabs = null,
   openTaskId: requestedTaskId = null,
 }: BoardViewProps) {
   const snapshot = useBoardSnapshot(boardId);
@@ -77,6 +83,11 @@ export function BoardView({
   const [renaming, setRenaming] = useState<Task | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [savingFilter, setSavingFilter] = useState(false);
+  // Which column, if any, has its composer open. Lifted out of the column so
+  // that the header's "New task" can open one — a board-level control cannot
+  // reach into a child's state, and two ways to start a task that disagree
+  // about whether one is already being written is a bug waiting to happen.
+  const [composingColumnId, setComposingColumnId] = useState<string | null>(null);
   const today = useToday();
 
   const { filter, setFilter } = useBoardFilter(boardId);
@@ -297,6 +308,33 @@ export function BoardView({
 
   return (
     <div className="relative flex h-full flex-col">
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3 px-5 pt-5 pb-4">
+        <div className="min-w-0">
+          <p className="text-fg-secondary text-2xs font-semibold tracking-[0.08em] uppercase">
+            Workspace
+          </p>
+          <h1 className="text-fg-primary mt-1 truncate text-xl font-semibold tracking-[-0.01em]">
+            {projectName}
+          </h1>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2">
+          {tabs}
+          <Button
+            variant="primary"
+            onClick={() => {
+              // The first column is where work arrives. A "new task" with no
+              // column named has to land somewhere, and the intake column is
+              // the only answer that does not need explaining.
+              setComposingColumnId(columns[0]?.id ?? null);
+            }}
+          >
+            <Plus size={15} aria-hidden />
+            New task
+          </Button>
+        </div>
+      </div>
+
       <FilterBar
         filter={filter}
         onChange={setFilter}
@@ -352,7 +390,7 @@ export function BoardView({
             setDragging(null);
           }}
         >
-          <div className="flex h-full gap-3 overflow-x-auto p-3">
+          <div className="flex h-full gap-4 overflow-x-auto px-5 pt-1 pb-5">
             {columns.map((column, index) => (
               <BoardColumn
                 key={column.id}
@@ -362,6 +400,10 @@ export function BoardView({
                 canDelete={canDeleteColumns}
                 canMoveLeft={index > 0}
                 canMoveRight={index < columns.length - 1}
+                composing={composingColumnId === column.id}
+                onComposingChange={(open) => {
+                  setComposingColumnId(open ? column.id : null);
+                }}
                 onCreateTask={(columnId, title) => {
                   createTask.mutate({ columnId, title }, { onError: reportFailure });
                 }}
@@ -406,17 +448,17 @@ export function BoardView({
                 setEditing(null);
                 setColumnDialogOpen(true);
               }}
-              className="border-border-default text-fg-secondary hover:border-border-strong hover:text-fg-primary flex h-fit w-56 shrink-0 cursor-default items-center gap-1.5 rounded-lg border border-dashed px-3 py-2.5 text-left text-xs"
+              className="border-border-default text-fg-secondary hover:border-border-strong hover:text-fg-primary flex h-fit w-60 shrink-0 cursor-default items-center gap-2 rounded-xl border border-dashed px-3 py-3 text-left text-sm"
             >
-              <Plus size={14} aria-hidden />
+              <Plus size={15} aria-hidden />
               Add a column
             </button>
           </div>
 
           <DragOverlay dropAnimation={null}>
             {dragging === null ? null : (
-              <div className="border-accent-border bg-surface-raised w-[17rem] rounded-md border px-2.5 py-2 shadow-(--shadow-overlay)">
-                <p className="text-fg-primary line-clamp-3 text-xs leading-snug break-words">
+              <div className="border-accent-border bg-surface-raised w-[19rem] rounded-lg border px-3 py-2.5 shadow-(--shadow-overlay)">
+                <p className="text-fg-primary line-clamp-2 text-base font-medium break-words">
                   {dragging.title}
                 </p>
                 <p className="text-fg-secondary mt-1.5 font-mono text-2xs" data-numeric>
@@ -554,11 +596,11 @@ export function BoardView({
 
 function BoardSkeleton() {
   return (
-    <div className="flex h-full gap-3 p-3" aria-hidden>
+    <div className="flex h-full gap-4 px-5 pt-5" aria-hidden>
       {[0, 1, 2, 3].map((index) => (
         <div
           key={index}
-          className="bg-surface-column border-border-subtle h-40 w-72 shrink-0 rounded-lg border"
+          className="bg-surface-column border-border-subtle h-40 w-80 shrink-0 rounded-xl border"
         />
       ))}
       <p className="sr-only" role="status">

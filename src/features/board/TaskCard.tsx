@@ -109,12 +109,12 @@ export function TaskCard({
         onClick={() => {
           onOpen(task);
         }}
-        className="border-border-subtle bg-surface-raised hover:border-border-strong focus-visible:border-accent-border w-full cursor-default rounded-md border px-2.5 py-2 pr-12 text-left transition-colors duration-(--duration-fast)"
+        className="border-border-subtle bg-surface-card hover:border-border-strong focus-visible:border-accent-border w-full cursor-default rounded-lg border px-3 py-2.5 pr-12 text-left transition-colors duration-(--duration-fast)"
         data-task-card
         data-task-id={task.id}
       >
         {shownLabels.length === 0 ? null : (
-          <div className="mb-1.5 flex flex-wrap items-center gap-1">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
             {shownLabels.map((label) => (
               <LabelChip key={label.id} label={label} />
             ))}
@@ -132,14 +132,26 @@ export function TaskCard({
 
         <p
           data-task-title
-          className="text-fg-primary line-clamp-3 text-xs leading-snug break-words"
+          className="text-fg-primary line-clamp-2 text-base font-medium break-words"
           // The full text is available on hover for a title the card clamps.
           title={task.title}
         >
           {task.title}
         </p>
 
-        <div className="text-fg-secondary mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs">
+        {/*
+          Two lines of the description, which is what makes a card scannable
+          without opening it. Clamped rather than truncated at a character
+          count: a count picked in the editor is wrong at every other column
+          width, and the board's columns are deliberately elastic.
+        */}
+        {task.description.trim() === "" ? null : (
+          <p className="text-fg-secondary mt-1 line-clamp-2 text-sm break-words">
+            {task.description}
+          </p>
+        )}
+
+        <div className="text-fg-secondary mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
           <span className="font-mono" data-numeric>
             {reference}
           </span>
@@ -188,7 +200,7 @@ export function TaskCard({
         </div>
       </button>
 
-      <div className="absolute top-1 right-1 flex items-center gap-0.5">
+      <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
         <IconButton
           {...attributes}
           {...listeners}

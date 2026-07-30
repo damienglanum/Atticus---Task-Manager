@@ -139,7 +139,9 @@ beforeEach(() => {
 describe("typing in the task editor", () => {
   it("re-renders no card at all", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<BoardView boardId="b1" projectId="p1" projectPrefix="TKB" />);
+    renderWithProviders(
+      <BoardView boardId="b1" projectId="p1" projectPrefix="TKB" projectName="Atticus" />,
+    );
 
     await screen.findByText("Task 1");
     // Anchored: the card button's accessible name is its whole text — the title
@@ -171,7 +173,9 @@ describe("typing in the task editor", () => {
     // card that never rendered — would make the assertion above pass for the
     // wrong reason, which is the failure mode a zero-count test invites.
     const user = userEvent.setup();
-    renderWithProviders(<BoardView boardId="b1" projectId="p1" projectPrefix="TKB" />);
+    renderWithProviders(
+      <BoardView boardId="b1" projectId="p1" projectPrefix="TKB" projectName="Atticus" />,
+    );
 
     await screen.findByText("Task 1");
     const before = cardRenders.count;

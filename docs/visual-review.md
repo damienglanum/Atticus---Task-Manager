@@ -17,6 +17,42 @@ tool, not part of the product.
 
 ---
 
+## v1.1 — Visual direction revised · 2026-07-31
+
+**Reviewed in a browser, not the Tauri window.** The harness above needs a running desktop app; this
+pass was a styling change with no Rust in it, so it was reviewed against the real components driven
+by a stubbed `window.__TAURI_INTERNALS__` — the seam `@tauri-apps/api` calls through — with fixture
+projects, columns, labels and tasks. That renders the actual CSS and the actual layout, which is
+what was under review. It does **not** exercise the webview, the titlebar, or anything the OS draws,
+so the next end-to-end pass should re-photograph the states below in the app's own window.
+
+| State                                | Result                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| 1180 × 760 board, light              | Pass — panels on a white canvas, five columns, cards legible at a glance   |
+| 1180 × 760 board, dark               | Pass — card > column > page steps all distinguishable                      |
+| 1440 × 900 board, light              | Pass — columns grow into the width rather than leaving it empty            |
+| Task editor, full page, light        | Pass — content left, three rail panels right                               |
+| Task editor, full page, dark         | Pass                                                                       |
+
+### Changed on review
+
+- **V1.1-1 — Three left edges.** The board header, the filter bar and the columns each started at a
+  different x: `px-5`, `px-3`, `px-5`. Read as three unrelated bars rather than one page. The filter
+  bar now matches the other two.
+
+### Noted, not filed as a defect
+
+- **The primary button is duller than the mockup's.** Deliberate, and the reason is measured — see
+  design-decisions.md §7 and the note beside `--color-accent-solid`. Worth re-opening only if the
+  product owner decides to relax the contrast floor, which is a product decision, not a styling one.
+- **The editor's left column has a lot of empty space on a task with no description.** Inherent to a
+  full-page editor holding a short task. Nothing was added to fill it; whitespace is cheaper than
+  invented furniture.
+- **The editor heading repeats the title field beneath it.** Accepted: the heading is the dialog's
+  accessible name and has to say which task is open.
+
+---
+
 ## M8 — Theme, accessibility, responsive · 2026-07-30
 
 **The first review at the widths it claims.** Every earlier entry on this page — M4's three sizes

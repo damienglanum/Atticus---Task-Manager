@@ -266,3 +266,60 @@ themes. Four of the assignments sketched above did not survive it:
 The worst measured ratio in either theme is now 3.33:1 for a control boundary against a 3:1
 threshold, and 5.21:1 for text against 4.5:1. The numbers are printed by the test, not only
 asserted.
+
+## 7. v1.1 — the visual direction, revised
+
+Milestones 1–10 shipped Direction A ("Ledger", §5): austere, dense, indigo, and built to put as
+many cards on screen as the type scale allowed. v1.1 keeps its reasoning and changes its clothes.
+The brief was a set of mockups; what follows is what they asked for, and what was refused.
+
+### What changed, and why
+
+- **The accent is cyan, not indigo.** A brand decision, taken by the product owner. It carries a
+  measurement consequence recorded in `tokens.css`: cyan is a high-chroma scale, and neither its
+  step 9 (3.00:1 against white) nor its light step 11 (4.19:1 on the sunken surface) clears the
+  threshold the interface holds itself to. Both are therefore *pinned* to darker values, exactly as
+  `--color-danger-solid` already was. **The buttons are a deeper cyan than the mockups show, and
+  that is the reason.** The alternative — the mockups' brighter fill with a white label — measures
+  around 2.8:1, which this codebase does not ship.
+- **The canvas is white and the panels are tinted**, inverting v1.0, where a tinted page held
+  near-white columns. This single swap is most of why the board now reads as panels on a page.
+- **The type ceiling moved, slightly.** v1.0 capped every string at 15px. v1.1 keeps that for the
+  board's contents — card titles went from 12 to 14px, and that is the largest change — and breaks
+  it only for the page title and the editor's, which are `--text-xl` (22px). There are two of them
+  in the whole application.
+- **Cards carry two lines of description.** The mockups' cards are scannable without opening
+  anything, and this is what does it. It is also the one change that costs density: a column shows
+  fewer cards than it did, which §5 explicitly traded the other way. The trade is reversed because
+  a card that must be opened to be understood is not a card that saved you anything.
+- **The task editor is a page, not a floating dialog** — full window, its own header, a two-column
+  body with a metadata rail. It is still a Radix dialog underneath (`DialogPage`): Escape, focus
+  trapping, focus restoration and `aria-hidden` on the background are not worth reimplementing for
+  a visual result that does not depend on them.
+
+### What the mockups asked for and did not get
+
+The mockups depict a different product in places, and those parts were declined rather than faked.
+Atticus is local-first and single-user; there is no account, no server and no second person.
+
+- **Assignee avatars, a member stack, "Discussions", and "Last synced with Cloud"** — there is
+  nobody to assign to and nothing to sync with. Rendering them would be a promise the application
+  cannot keep.
+- **A notification bell** — nothing generates notifications.
+- **A Dashboard and a Notes section** — features, not styling. Not built.
+- **A "Welcome, share your name" first-run screen** — the application has no concept of a user.
+- **A Cancel / Save Changes pair in the editor** — v1.0's no-save-button decision stands, and the
+  header says "Saves as you type" instead. A save button users can forget costs them their writing.
+
+### One deviation worth naming
+
+The mockup's editor header reads "Edit Task". Ours reads the task's own name, because that string
+is the dialog's accessible name — and "Edit Task" would tell a screen-reader user only that *a*
+task is open. The reference sits above it, where the mockup puts its breadcrumb.
+
+### The one-shadow rule survived
+
+`--shadow-overlay` is still the only shadow in the system, and still reserved for the drag overlay
+and true overlays. Every panel, card and column in the new direction is separated by a hairline and
+a surface step. Where the dark theme cannot spend a shadow, it spends a step instead — which is why
+`--color-surface-raised` is now one step above the card rather than equal to it.

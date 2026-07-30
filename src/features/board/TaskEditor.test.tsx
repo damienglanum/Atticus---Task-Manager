@@ -76,7 +76,9 @@ describe("TaskEditor", () => {
     // `userEvent.setup()` installs its own clipboard stub, so the assertion
     // reads what actually landed there rather than spying on a replaced method.
     const { user } = render();
-    await screen.findByRole("dialog", { name: "TKB-14" });
+    // The editor names itself after the task, not after the reference — see the
+    // note on `title` in TaskEditor. The reference is above it, and copyable.
+    await screen.findByRole("dialog", { name: "Write the release notes" });
 
     await user.click(screen.getByRole("button", { name: "Copy TKB-14" }));
 
@@ -107,7 +109,7 @@ describe("TaskEditor", () => {
     await screen.findByLabelText("Edit description");
 
     await user.type(screen.getByLabelText("Edit description"), "half a thought");
-    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Back to the board" }));
 
     await waitFor(() => {
       expect(taskUpdate).toHaveBeenCalledWith("t1", { description: "half a thought" });

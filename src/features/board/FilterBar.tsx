@@ -56,8 +56,10 @@ export function FilterBar({
   const facets = activeFacetCount(filter);
   const filtering = facets > 0;
 
+  // `px-5` matches the board header above and the columns below: three rows
+  // that start at three different left edges read as three unrelated bars.
   return (
-    <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-1.5">
+    <div className="border-border-subtle flex items-center gap-2 border-b px-5 py-2">
       <div className="border-border-strong focus-within:border-accent-border focus-within:outline-focus-ring focus-within:outline-2 focus-within:outline-offset-2 flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1">
         <Search size={12} aria-hidden className="text-fg-secondary shrink-0" />
         <input

@@ -10,7 +10,7 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 import { IconButton } from "@/components/ui/Button";
 import { MenuContent, MenuItem, MenuSeparator } from "@/components/ui/Menu";
@@ -35,6 +35,9 @@ interface BoardColumnProps {
   /** Every label in the project, so cards can name their own. */
   labels: Label[];
   today: string;
+  /** Owned by the board, so the header's "New task" can open this one. */
+  composing: boolean;
+  onComposingChange: (composing: boolean) => void;
   onOpenTask: (task: Task) => void;
   onCreateTask: (columnId: string, title: string) => void;
   onEditColumn: (column: Column) => void;
@@ -58,6 +61,8 @@ export function BoardColumn({
   otherColumns,
   labels,
   today,
+  composing,
+  onComposingChange,
   onOpenTask,
   onCreateTask,
   onEditColumn,
@@ -70,7 +75,6 @@ export function BoardColumn({
   onNudgeTask,
   onMoveTaskToColumn,
 }: BoardColumnProps) {
-  const [composing, setComposing] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement>(null);
 
   // The column itself is a drop target, so a task can be dropped into an empty
@@ -88,27 +92,32 @@ export function BoardColumn({
         // Grows to share whatever width is going, within limits: a fixed 18rem
         // left most of a wide display empty while still scrolling, and letting
         // columns grow without a ceiling makes a two-column board absurd.
-        "bg-surface-column flex min-w-68 flex-1 shrink-0 basis-72 flex-col rounded-lg border",
-        "max-w-96",
+        "bg-surface-column flex min-w-72 flex-1 shrink-0 basis-80 flex-col rounded-xl border",
+        "max-w-104",
         // Three signals for a breached limit, only one of which is colour: a
         // heavier border, a warning glyph, and the count itself (US-7 AC2).
         overLimit ? "border-warning-border" : "border-border-subtle",
         isOver && "bg-surface-sunken",
       )}
     >
-      <header className="flex items-center gap-1.5 px-2.5 pt-2.5 pb-1.5">
+      <header className="flex items-center gap-2 px-3 pt-3 pb-2">
         {overLimit ? (
           <AlertTriangle size={13} aria-hidden className="text-warning-fg shrink-0" />
         ) : null}
 
-        <h3 id={headingId} className="text-fg-primary truncate text-xs font-semibold">
+        <h3
+          id={headingId}
+          className="text-fg-primary truncate text-xs font-semibold tracking-[0.08em] uppercase"
+        >
           {column.name}
         </h3>
 
         <span
           className={cn(
-            "shrink-0 font-mono text-2xs",
-            overLimit ? "text-warning-fg font-semibold" : "text-fg-secondary",
+            "shrink-0 rounded px-1.5 py-0.5 text-2xs",
+            overLimit
+              ? "text-warning-fg bg-warning-bg font-semibold"
+              : "text-fg-secondary bg-surface-sunken",
           )}
           data-numeric
         >
@@ -122,10 +131,10 @@ export function BoardColumn({
             ref={addButtonRef}
             label={`Add a task to ${column.name}`}
             onClick={() => {
-              setComposing(true);
+              onComposingChange(true);
             }}
           >
-            <Plus size={14} aria-hidden />
+            <Plus size={15} aria-hidden />
           </IconButton>
 
           <DropdownMenu.Root>
@@ -206,7 +215,7 @@ export function BoardColumn({
       ) : null}
 
       <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-        <ul className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-1.5 pb-1.5">
+        <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
           {tasks.map((task, index) => (
             <TaskCard
               key={task.id}
@@ -236,7 +245,7 @@ export function BoardColumn({
             onCreateTask(column.id, title);
           }}
           onClose={() => {
-            setComposing(false);
+            onComposingChange(false);
             // Focus goes back where it came from, so Escape does not strand a
             // keyboard user at the top of the document (US-9 AC2).
             addButtonRef.current?.focus();
@@ -246,11 +255,11 @@ export function BoardColumn({
         <button
           type="button"
           onClick={() => {
-            setComposing(true);
+            onComposingChange(true);
           }}
-          className="text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary m-1.5 mt-0 flex cursor-default items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs"
+          className="text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary m-2 mt-0 flex cursor-default items-center gap-2 rounded-md px-2 py-2 text-left text-sm"
         >
-          <Plus size={13} aria-hidden />
+          <Plus size={14} aria-hidden />
           Add a task
         </button>
       )}

@@ -1,9 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
+import { ChevronRight, LayoutGrid, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { IconButton } from "@/components/ui/Button";
 import { Toaster } from "@/components/ui/Toaster";
 import { BoardNameDialog } from "@/features/boards/BoardNameDialog";
 import { BoardTabs } from "@/features/boards/BoardTabs";
@@ -34,6 +33,7 @@ import { useUndoAcrossApp } from "./useUndoAcrossApp";
 import type { Board } from "@/lib/bindings/Board";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
+import { cn } from "@/lib/cn";
 import { describeAppError, toAppError } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
 import { queryKeys } from "@/lib/query/keys";
@@ -204,58 +204,31 @@ export function App() {
           );
         }}
         onDelete={setDeleting}
+        onOpenSettings={() => {
+          setSettingsOpen(true);
+        }}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-border-subtle bg-surface-column flex h-11 shrink-0 items-center justify-between gap-4 border-b px-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {selectedProject !== null ? (
-              <h1 className="truncate text-xs font-semibold">{selectedProject.name}</h1>
-            ) : null}
-            {boards.data !== undefined && boards.data.length > 0 ? (
-              <BoardTabs
-                boards={boards.data}
-                selectedId={selectedBoardId}
-                onSelect={openBoard}
-                onCreate={() => {
-                  setBoardDialog({ mode: "create" });
-                }}
-                onRename={(board) => {
-                  setBoardDialog({ mode: "rename", board });
-                }}
-                onDelete={(board) => {
-                  deleteBoard.mutate(
-                    { id: board.id, projectId: board.projectId },
-                    {
-                      onError: (error: unknown) => {
-                        notifyError(describeAppError(toAppError(error)));
-                      },
-                    },
-                  );
-                }}
-              />
-            ) : null}
-          </div>
+        <header className="border-border-subtle flex h-14 shrink-0 items-center justify-between gap-4 border-b px-5">
+          <Breadcrumb projectName={selectedProject?.name ?? null} />
 
-          <IconButton
-            label="Settings"
-            onClick={() => {
-              setSettingsOpen(true);
+          <SearchField
+            onOpen={() => {
+              setPaletteOpen(true);
             }}
-          >
-            <Settings size={14} aria-hidden />
-          </IconButton>
+          />
         </header>
 
         <main className="min-h-0 flex-1">
           {workspace.isPending || projects.isPending ? (
-            <p role="status" className="text-fg-secondary p-6 text-xs">
+            <p role="status" className="text-fg-secondary p-6 text-sm">
               Opening your workspace…
             </p>
           ) : selectedProject === null ? (
             <NoProjectYet />
           ) : selectedBoardId === null ? (
-            <p className="text-fg-secondary p-6 text-xs">
+            <p className="text-fg-secondary p-6 text-sm">
               This project has no board open. Choose one above.
             </p>
           ) : (
@@ -263,7 +236,33 @@ export function App() {
               boardId={selectedBoardId}
               projectId={selectedProject.id}
               projectPrefix={selectedProject.keyPrefix}
+              projectName={selectedProject.name}
               openTaskId={requestedTaskId}
+              tabs={
+                boards.data !== undefined && boards.data.length > 0 ? (
+                  <BoardTabs
+                    boards={boards.data}
+                    selectedId={selectedBoardId}
+                    onSelect={openBoard}
+                    onCreate={() => {
+                      setBoardDialog({ mode: "create" });
+                    }}
+                    onRename={(board) => {
+                      setBoardDialog({ mode: "rename", board });
+                    }}
+                    onDelete={(board) => {
+                      deleteBoard.mutate(
+                        { id: board.id, projectId: board.projectId },
+                        {
+                          onError: (error: unknown) => {
+                            notifyError(describeAppError(toAppError(error)));
+                          },
+                        },
+                      );
+                    }}
+                  />
+                ) : null
+              }
             />
           )}
         </main>
@@ -370,11 +369,62 @@ export function App() {
   );
 }
 
+/** Where you are, in one line: the sidebar's list, then the open project. */
+function Breadcrumb({ projectName }: { projectName: string | null }) {
+  return (
+    <nav aria-label="Breadcrumb" className="min-w-0">
+      <ol className="text-fg-secondary flex items-center gap-2 text-sm">
+        <li className="flex shrink-0 items-center gap-2">
+          <LayoutGrid size={14} aria-hidden />
+          Projects
+        </li>
+        {projectName === null ? null : (
+          <li className="flex min-w-0 items-center gap-2">
+            <ChevronRight size={14} aria-hidden className="text-fg-secondary shrink-0" />
+            <span className="text-fg-primary truncate font-medium">{projectName}</span>
+          </li>
+        )}
+      </ol>
+    </nav>
+  );
+}
+
+/**
+ * The search affordance in the header.
+ *
+ * A button wearing a text field's clothes, not a text field. Typing here would
+ * mean two places that search — this one and the palette it opens — and the
+ * second would have to inherit the first one's half-typed query to avoid
+ * swallowing keystrokes. One search, entered one way, reached from two places.
+ */
+function SearchField({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "border-border-subtle bg-surface-column text-fg-secondary hover:border-border-default",
+        "flex h-9 w-72 max-w-[40vw] shrink-0 cursor-default items-center gap-2 rounded-lg border px-3 text-sm",
+        "transition-colors duration-(--duration-fast)",
+      )}
+    >
+      <Search size={14} aria-hidden className="shrink-0" />
+      <span className="truncate">Search tasks…</span>
+      {/* Secondary rather than the muted step: this is a shortcut a user is
+          meant to read and remember, and the muted step is reserved for the
+          disabled states whose contrast floor WCAG exempts. */}
+      <kbd className="border-border-subtle text-fg-secondary ml-auto shrink-0 rounded border px-1.5 py-0.5 font-sans text-2xs">
+        ⌘K
+      </kbd>
+    </button>
+  );
+}
+
 function NoProjectYet() {
   return (
     <div className="mx-auto max-w-md p-6 pt-16 text-center">
-      <h2 className="text-lg font-semibold">Start with a project</h2>
-      <p className="text-fg-secondary mt-2 text-xs">
+      <h2 className="text-xl font-semibold">Start with a project</h2>
+      <p className="text-fg-secondary mt-2 text-sm">
         Each project gets its own boards, columns, labels, and task numbering. Create one from the
         sidebar to begin.
       </p>
