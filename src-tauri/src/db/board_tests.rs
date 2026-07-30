@@ -1947,3 +1947,213 @@ fn duplicate_titles_are_permitted_everywhere() {
     let snapshot = board_view::load(fixture.db.connection(), &fixture.board_id).expect("snapshot");
     assert_eq!(snapshot.tasks.len(), 3, "no title is ever a key");
 }
+
+// --- Performance: product-spec §9 ------------------------------------------
+//
+// Every number here is printed as well as asserted, so `cargo test -- --nocapture`
+// reports the actual measurement rather than only whether it fit. A budget that
+// passes at 199ms against a 200ms target is worth seeing before it fails at 201.
+//
+// These are measured on a debug build, which is *slower* than what ships: the
+// release profile is optimised and the e2e profile is not. A debug measurement
+// inside budget is therefore a conservative result, and one outside budget needs
+// re-measuring on a release build before it counts as a failure.
+//
+// Each timing is the **fastest of several runs**, not a single one. Cargo runs
+// the suite in parallel, so a lone sample measures whatever else the machine was
+// doing: the move below timed 9.6ms on its own and 81ms — past its budget —
+// while 260 other tests ran beside it. The minimum is the sample least polluted
+// by contention, which is what makes the number a property of the operation
+// rather than of the scheduler.
+
+/// Runs `operation` `runs` times and returns the fastest.
+///
+/// See the note above on why the minimum rather than the mean.
+#[cfg(test)]
+fn fastest_of(runs: usize, mut operation: impl FnMut()) -> std::time::Duration {
+    (0..runs)
+        .map(|_| {
+            let started = std::time::Instant::now();
+            operation();
+            started.elapsed()
+        })
+        .min()
+        .expect("at least one run")
+}
+
+/// Seeds `count` live tasks spread across the fixture's columns.
+#[cfg(test)]
+fn seed_live_tasks(fixture: &Fixture, count: usize) -> Vec<String> {
+    let project_id = project_of(fixture);
+    let board_id = fixture.board_id.clone();
+    let columns = fixture.columns.clone();
+    let mut ids = Vec::with_capacity(count);
+
+    let conn = fixture.db.connection();
+    conn.execute("BEGIN", []).expect("begin");
+    for index in 0..count {
+        let column = &columns[index % columns.len()];
+        let id = format!("perf-live-{index}");
+        // `position` counts within the column, so the unique index over
+        // (column_id, position) stays satisfied without a reindex.
+        let position = (index / columns.len()) as i64;
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, board_id, column_id, number, title, description, \
+             priority, position, archived_at, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', 0, ?7, NULL, 0, 0)",
+            rusqlite::params![
+                id,
+                project_id,
+                board_id,
+                column,
+                10_000_i64 + index as i64,
+                format!("Performance task {index}"),
+                position,
+            ],
+        )
+        .expect("insert");
+        ids.push(id);
+    }
+    conn.execute("COMMIT", []).expect("commit");
+
+    ids
+}
+
+#[test]
+fn a_board_of_500_tasks_loads_inside_its_budget() {
+    let mut fixture = fixture();
+
+    // Six columns, because that is the shape product-spec §9 states. The default
+    // board has five, so measuring it as-is would be measuring a slightly
+    // different question than the one the target asks.
+    columns::create(fixture.db.connection_mut(), &fixture.board_id, "Review").expect("column");
+    fixture.columns = columns::list(fixture.db.connection(), &fixture.board_id)
+        .expect("columns")
+        .into_iter()
+        .map(|column| column.id)
+        .collect();
+    assert_eq!(fixture.columns.len(), 6);
+
+    seed_live_tasks(&fixture, 500);
+
+    // Warmed once: the first call pays for statement preparation and page cache,
+    // which is not what "render a board" costs in a running application.
+    let snapshot = board_view::load(fixture.db.connection(), &fixture.board_id).expect("warm");
+
+    let elapsed = fastest_of(5, || {
+        board_view::load(fixture.db.connection(), &fixture.board_id).expect("load");
+    });
+
+    assert_eq!(snapshot.tasks.len(), 500);
+    println!(
+        "board_load with {} tasks across {} columns took {elapsed:?} (budget 200ms)",
+        snapshot.tasks.len(),
+        snapshot.columns.len()
+    );
+    assert!(
+        elapsed < std::time::Duration::from_millis(200),
+        "board_load with 500 tasks took {elapsed:?}, budget is 200ms"
+    );
+}
+
+#[test]
+fn moving_a_task_commits_inside_its_budget() {
+    let mut fixture = fixture();
+    let ids = seed_live_tasks(&fixture, 500);
+    let target = fixture.columns[1].clone();
+
+    // The slowest realistic move: into the front of a populated column, which is
+    // the case that shifts every position behind it. A different task each time,
+    // so every run is a real move rather than a no-op.
+    let mut index = 0;
+    let elapsed = fastest_of(5, || {
+        tasks::move_to(fixture.db.connection_mut(), &ids[index], &target, 0).expect("move");
+        index += 1;
+    });
+
+    println!("task move committed in {elapsed:?} (budget 50ms)");
+    assert!(
+        elapsed < std::time::Duration::from_millis(50),
+        "a move took {elapsed:?}, budget is 50ms"
+    );
+}
+
+#[test]
+fn five_thousand_tasks_across_twenty_projects_still_loads_one_board_quickly() {
+    // product-spec §9's "total dataset supported" line. The point is not that
+    // 5,000 rows exist, but that a board still costs what one board costs —
+    // `board_load` reads its own board only.
+    let mut db = Database::open_in_memory().expect("database");
+    let mut first_board: Option<String> = None;
+
+    for project_index in 0..20 {
+        let (project, board_id) = projects::create(
+            db.connection_mut(),
+            NewProject {
+                name: format!("Project {project_index}"),
+                description: String::new(),
+                color: "indigo".to_owned(),
+                key_prefix: None,
+                directory_path: None,
+            },
+        )
+        .expect("project");
+
+        let columns: Vec<String> = columns::list(db.connection(), &board_id)
+            .expect("columns")
+            .into_iter()
+            .map(|column| column.id)
+            .collect();
+
+        let conn = db.connection();
+        conn.execute("BEGIN", []).expect("begin");
+        for index in 0..250 {
+            let column = &columns[index % columns.len()];
+            conn.execute(
+                "INSERT INTO tasks (id, project_id, board_id, column_id, number, title, \
+                 description, priority, position, archived_at, created_at, updated_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', 0, ?7, NULL, 0, 0)",
+                rusqlite::params![
+                    format!("bulk-{project_index}-{index}"),
+                    project.id,
+                    board_id,
+                    column,
+                    index as i64 + 1,
+                    format!("Task {index}"),
+                    (index / columns.len()) as i64,
+                ],
+            )
+            .expect("insert");
+        }
+        conn.execute("COMMIT", []).expect("commit");
+
+        if first_board.is_none() {
+            first_board = Some(board_id);
+        }
+    }
+
+    let total: i64 = db
+        .connection()
+        .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))
+        .expect("count");
+    assert_eq!(total, 5_000);
+
+    let board_id = first_board.expect("a board");
+    let snapshot = board_view::load(db.connection(), &board_id).expect("warm");
+
+    let elapsed = fastest_of(5, || {
+        board_view::load(db.connection(), &board_id).expect("load");
+    });
+
+    // 250 of the 5,000, because a board reads its own board.
+    assert_eq!(snapshot.tasks.len(), 250);
+    println!(
+        "with {total} tasks across 20 projects, one board loaded {} of them in {elapsed:?} \
+         (budget 200ms)",
+        snapshot.tasks.len()
+    );
+    assert!(
+        elapsed < std::time::Duration::from_millis(200),
+        "a board in a 5,000-task database took {elapsed:?}, budget is 200ms"
+    );
+}

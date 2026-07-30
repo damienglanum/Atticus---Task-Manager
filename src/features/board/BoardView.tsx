@@ -290,6 +290,8 @@ export function BoardView({
     );
   }
 
+  markInteractive();
+
   const columns = snapshot.data.columns;
   const canDeleteColumns = columns.length > 1;
 
@@ -565,3 +567,25 @@ function BoardSkeleton() {
     </div>
   );
 }
+
+/**
+ * Records the moment a board first rendered with real data.
+ *
+ * Milestone 10 measures "cold launch → interactive board", and the only honest
+ * place to take that reading is inside the page: measuring it from the test
+ * measures whenever the driver got round to asking, which on this harness is
+ * ten seconds of window-probe overhead rather than anything the application did.
+ *
+ * Once per document, and a no-op in jsdom, which has no `performance.mark`.
+ */
+let marked = false;
+function markInteractive(): void {
+  if (marked) return;
+  marked = true;
+
+  if (typeof performance !== "undefined" && typeof performance.mark === "function") {
+    performance.mark(BOARD_INTERACTIVE_MARK);
+  }
+}
+
+export const BOARD_INTERACTIVE_MARK = "atticus:board-interactive";

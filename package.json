@@ -25,7 +25,9 @@
     "rust:lint": "node scripts/with-rust.mjs --cwd src-tauri cargo clippy --all-targets -- -D warnings",
     "rust:test": "node scripts/with-rust.mjs --cwd src-tauri cargo test",
     "bindings:check": "node scripts/check-bindings.mjs",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "release:check": "node scripts/check-release.mjs",
+    "release:check:markers": "node scripts/check-release.mjs --verify-markers"
   },
   "overrides": {
     "serialize-javascript": "^7.0.7",

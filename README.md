@@ -162,10 +162,21 @@ database first, so a restore is itself reversible.
 
 Written honestly, and kept current as the milestones land.
 
-- **Milestones 1–8 are complete, and milestone 9 is most of the way there.** Projects, boards,
+- **Milestones 1–9 are complete; milestone 10 is most of the way there.** Projects, boards,
   columns with work-in-progress limits, the full task editor, search, filters, undo, the themed and
   accessible interface, and JSON export/import with backup and restore. Nothing in the interface is
   a placeholder or a dead control.
+- **The packaged app has not been launched by hand from Finder.** `npm run tauri build` produces a
+  working `.app` and `.dmg`, and `npm run release:check` asserts the binary carries no WebDriver
+  server, but nobody has yet double-clicked it with the dev server stopped and the network off and
+  worked through a real session. Until someone has, "it ships" is a claim rather than a fact.
+- **Cold launch time is unmeasured.** Every other performance target in
+  [`docs/product-spec.md`](docs/product-spec.md) §9 has a real number beside it. This one cannot be
+  measured through the test harness — the driver's own window probes dwarf it — so it needs timing
+  by hand on a release build.
+- **Nothing asserts that typing in the task editor re-renders no cards.** The target is stated and
+  the editor is debounced and locally-stateful by design, but the React Profiler check that would
+  prove it does not exist.
 - **The export format has only ever had one version**, so the upgrade chain that reads older files
   exists but has nothing old to read yet. It is unit-tested against a newer version being refused,
   not against a real older fixture — that arrives with the second format change.

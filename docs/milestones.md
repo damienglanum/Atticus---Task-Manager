@@ -315,6 +315,38 @@ Acceptance criteria:
 - Every visual state in `docs/testing.md` §Visual inspected and corrected.
 - All documentation deliverables complete, including an honest "Known limitations".
 
+**In progress on 2026-07-30.** What is done and what is not:
+
+- ✅ **Performance measured and recorded** in product-spec §9 with actual numbers, each the fastest
+  of five runs and each printed under `--nocapture`. Board load with 500 tasks across 6 columns:
+  **5.9 ms** against 200. Task move committed: **19.5 ms** against 50. Search over 5,000: **8.9 ms**
+  against 100. One board out of a 5,000-task, 20-project database: **3.3 ms**.
+  The measurement method is the finding: a single sample timed the move at 9.6 ms alone and 81 ms —
+  past budget — while 260 other tests ran beside it. Taking the minimum measures the operation
+  rather than the scheduler, and the comment in the file says so.
+- ⚠️ **Cold launch is not measurable on this harness**, and is recorded as such rather than
+  reported. The document is ready in 71 ms; the board's own `performance.mark` reads ~6900 ms,
+  almost all of which is the two five-second window probes the driver performs after a session
+  reload. It cannot be measured without a reload either — one application instance outlives the
+  whole run, so the only genuine launch happens against an empty database where no board renders.
+  The mark now exists in the application, so a release build can be timed by hand with it.
+- ✅ **Full end-to-end suite green**: 86 specs, including restart-and-persist and the export round
+  trip.
+- ✅ **`npm run tauri build` produces both bundles.** `.app` and
+  `Atticus - Task Manager_0.1.0_aarch64.dmg`, from a 6.9 MB binary.
+- ✅ **The release binary is asserted clean of the WebDriver server**, against the *artifact* rather
+  than the manifest — `npm run release:check`. Four candidate markers were tried and only two
+  actually appear in a WebDriver build, so the other two would have been a check of nothing;
+  `npm run release:check:markers` re-runs that verification, so the list cannot rot unnoticed.
+- ✅ **No console output during the primary workflow**, asserted end to end by a collector installed
+  before the workflow runs and covering `console.error`, `console.warn`, uncaught errors and
+  unhandled rejections.
+- ⛔ **Not done:** launching the packaged app from Finder with the dev server stopped and network
+  disabled, and completing the core workflow by hand. That is a person's job, not a command's, and
+  claiming it without doing it would be the one dishonesty this plan exists to prevent.
+- ⛔ **Not done:** the React Profiler assertion that typing in the editor re-renders no column or
+  card. The target is stated in product-spec §9 and is currently unmeasured.
+
 ---
 
 ## Reporting
