@@ -9,8 +9,8 @@ import {
 import { cn } from "@/lib/cn";
 
 const CONTROL = cn(
-  "bg-surface-card border-border-default text-fg-primary w-full rounded-md border px-2 py-1.5",
-  "text-base placeholder:text-fg-tertiary",
+  "bg-surface-card border-border-strong text-fg-primary w-full rounded-md border px-2 py-1.5",
+  "text-base placeholder:text-fg-secondary",
   "aria-invalid:border-danger-border",
 );
 
@@ -46,7 +46,7 @@ export function Field({ label, error, hint, children }: FieldShellProps) {
       {children({ id, describedBy, invalid: error !== undefined })}
 
       {hint !== undefined ? (
-        <p id={hintId} className="text-fg-tertiary text-2xs">
+        <p id={hintId} className="text-fg-secondary text-2xs">
           {hint}
         </p>
       ) : null}

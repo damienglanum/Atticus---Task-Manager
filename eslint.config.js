@@ -88,6 +88,15 @@ export default tseslint.config(
     },
   },
 
+  // palette.ts reads the stylesheets from disk so contrast.test.ts can measure
+  // the values the app actually ships. It is imported by that test and by
+  // nothing the webview loads — listed here by name rather than by a glob, so
+  // adding a second such module is a decision someone has to make on purpose.
+  {
+    files: ["src/styles/palette.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
+
   // Node-side tooling: plain JS, no type information available.
   {
     files: ["**/*.{js,mjs,cjs}"],

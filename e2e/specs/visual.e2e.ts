@@ -18,6 +18,7 @@ import {
   fieldLabelled,
   openMenu,
   openTaskMenu,
+  setViewportWidth,
   waitForAppReady,
 } from "../support/app.js";
 
@@ -78,36 +79,90 @@ describe("visual review", () => {
   });
 
   it("fills a wide window without stretching the columns", async () => {
-    await browser.setWindowRect(null, null, 1680, 1000);
+    await setViewportWidth(1680, 1000);
     await resetBoardScroll();
     await expect(columnNamed("Done")).toBeDisplayed();
     await shoot("board-wide");
   });
 
   it("shows the whole board on a laptop window", async () => {
-    await browser.setWindowRect(null, null, 1280, 820);
+    await setViewportWidth(1280, 820);
     await resetBoardScroll();
     await expect(columnNamed("Done")).toBeDisplayed();
     await shoot("board-laptop");
   });
 
   it("stays usable in a narrow window, scrolling the board rather than the page", async () => {
-    await browser.setWindowRect(null, null, 900, 700);
+    // 900 CSS pixels, which is the minimum product-spec §6 supports — and which
+    // this test did not previously reach. `setViewportWidth` converts and then
+    // proves the viewport landed; see its comment for why that is not pedantry.
+    await setViewportWidth(900, 700);
     await resetBoardScroll();
     await expect(columnNamed("Backlog")).toBeDisplayed();
 
     // The board scrolls sideways inside itself. If the document scrolled
     // instead, the sidebar and header would slide off with it.
-    const documentOverflows = await browser.execute(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
-    );
-    expect(documentOverflows).toBe(false);
+    //
+    // The assertion names the elements sticking out rather than reporting a
+    // boolean. A bare `false` here cost most of a session: it says the document
+    // is wider than the window and nothing about which box made it that way,
+    // which is the only fact that leads to a fix.
+    const overflowing = await browser.execute(() => {
+      const limit = document.documentElement.clientWidth;
+
+      // Content inside a horizontal scroller is *supposed* to extend past the
+      // viewport — that is the board doing its job. Only boxes that overhang
+      // without such an ancestor push the document itself.
+      const scrolls = (element: Element) => {
+        const overflowX = getComputedStyle(element).overflowX;
+        return overflowX === "auto" || overflowX === "scroll";
+      };
+      const insideAScroller = (element: Element) => {
+        for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
+          if (scrolls(parent)) return true;
+        }
+        return false;
+      };
+
+      return Array.from(document.querySelectorAll("*"))
+        .filter((element) => Math.round(element.getBoundingClientRect().right) > limit)
+        .filter((element) => !insideAScroller(element))
+        .map((element) => {
+          const right = Math.round(element.getBoundingClientRect().right);
+          // `getAttribute` rather than `className`: on an SVG element the
+          // property is an `SVGAnimatedString`, which stringifies to
+          // "[object SVGAnimatedString]" and names nothing.
+          const classes = (element.getAttribute("class") ?? "").slice(0, 60);
+          const name =
+            element.getAttribute("aria-label") ?? element.textContent.trim().slice(0, 30);
+          return `${element.tagName.toLowerCase()}.${classes} "${name}" right=${String(right)} limit=${String(limit)}`;
+        });
+    });
+
+    expect(overflowing).toStrictEqual([]);
 
     await shoot("board-narrow");
   });
 
+  it("leaves the columns their own width on a 1920 display", async () => {
+    // The third of the three widths milestone 8 requires inspecting. A fixed
+    // 300 px column is the point of the design, so the check is that the extra
+    // room becomes empty space rather than five very wide columns.
+    await setViewportWidth(1920, 1080);
+    await resetBoardScroll();
+    await expect(columnNamed("Done")).toBeDisplayed();
+
+    const widths = await $$("main section[aria-labelledby]").map((section) =>
+      section.getSize("width"),
+    );
+    expect(new Set(widths).size).toBe(1);
+    expect(widths[0]).toBeLessThanOrEqual(300);
+
+    await shoot("board-1920");
+  });
+
   it("keeps a long card readable rather than letting one column grow", async () => {
-    await browser.setWindowRect(null, null, 1280, 820);
+    await setViewportWidth(1280, 820);
 
     const widths = await $$("main section[aria-labelledby]").map((section) =>
       section.getSize("width"),
@@ -130,7 +185,7 @@ describe("visual review", () => {
   });
 
   it("photographs the task editor, filled in", async () => {
-    await browser.setWindowRect(null, null, 1280, 820);
+    await setViewportWidth(1280, 820);
     await resetBoardScroll();
 
     await openTaskMenu("Accessible keyboard drag-and-drop");
@@ -171,7 +226,7 @@ describe("visual review", () => {
   });
 
   it("photographs a task held mid-drag", async () => {
-    await browser.setWindowRect(null, null, 1280, 820);
+    await setViewportWidth(1280, 820);
     await resetBoardScroll();
 
     const handle = $('button[aria-label="Drag Command palette shell"]');
@@ -185,7 +240,7 @@ describe("visual review", () => {
   });
 
   it("photographs the command palette", async () => {
-    await browser.setWindowRect(null, null, 1280, 820);
+    await setViewportWidth(1280, 820);
     await browser.keys(["Meta", "k"]);
 
     const input = $('input[aria-label="Search tasks and commands"]');
@@ -207,9 +262,9 @@ describe("visual review", () => {
 
     await browser.waitUntil(
       async () =>
-        (await $("button*=Clear")
+        await $("button*=Clear")
           .isDisplayed()
-          .catch(() => false)) === true,
+          .catch(() => false),
       { timeoutMsg: "the filter did not take" },
     );
     await shoot("board-filtered");
@@ -225,8 +280,40 @@ describe("visual review", () => {
     await browser.keys("Escape");
     await $('div[role="dialog"]').waitForDisplayed({ reverse: true });
 
-    await browser.setWindowRect(null, null, 1280, 820);
+    await setViewportWidth(1280, 820);
     await resetBoardScroll();
     await shoot("board-light");
+  });
+
+  it("photographs the board in greyscale, with every signal still readable", async () => {
+    // `design-decisions.md` §3 promises priority, due-date state and a
+    // work-in-progress breach each survive without colour. This is that promise
+    // photographed: the whole document desaturated, so a reviewer sees what a
+    // greyscale display — or a reader who cannot separate these hues — sees.
+    //
+    // The properties themselves are asserted where they can fail loudly:
+    // `src/features/board/greyscale.test.ts` for the encodings, and
+    // `board.e2e.ts` for the breach announcement. What is added here is the
+    // evidence that they are actually rendered together on one board.
+    await setViewportWidth(1280, 820);
+    await resetBoardScroll();
+
+    await browser.execute(() => {
+      document.documentElement.style.filter = "grayscale(1)";
+    });
+
+    // Named, not merely present: with the colour gone these three are the whole
+    // of the encoding, so the shot is only worth keeping if they are in it.
+    const column = $('//section[.//h3[normalize-space(text())="In Progress"]]');
+    await expect(column).toHaveText(expect.stringContaining("2/1"));
+
+    const card = $('//li[.//*[normalize-space(text())="Accessible keyboard drag-and-drop"]]');
+    await expect(card).toHaveText(expect.stringContaining("High"));
+
+    await shoot("board-greyscale");
+
+    await browser.execute(() => {
+      document.documentElement.style.filter = "";
+    });
   });
 });

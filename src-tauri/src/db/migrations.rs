@@ -52,7 +52,7 @@ pub fn apply(conn: &mut Connection, migrations: &[Migration]) -> AppResult<Vec<u
     if current > latest {
         return Err(AppError::Migration {
             message: format!(
-                "This database was written by a newer version of Takenkanban \
+                "This database was written by a newer version of Atticus \
                  (schema {current}); this build understands schema {latest}. \
                  Opening it could destroy data, so it was not opened. \
                  Update the application, or restore a backup."

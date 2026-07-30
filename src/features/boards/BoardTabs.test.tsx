@@ -46,8 +46,8 @@ describe("BoardTabs", () => {
     expect(screen.queryByRole("menuitem", { name: /Delete board/ })).not.toBeInTheDocument();
   });
 
-  it("offers delete once a second board exists", async () => {
-    const handlers = setup([makeBoard("b1", "Board", 0), makeBoard("b2", "Ideas", 1)], "b1");
+  it("offers delete once a second board exists, acting on the open board", async () => {
+    const handlers = setup([makeBoard("b1", "Board", 0), makeBoard("b2", "Ideas", 1)], "b2");
 
     await userEvent.click(screen.getByRole("button", { name: "Actions for Ideas" }));
     await userEvent.click(screen.getByRole("menuitem", { name: /Delete board/ }));
@@ -55,6 +55,28 @@ describe("BoardTabs", () => {
     expect(handlers.onDelete).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ id: "b2" }),
     );
+  });
+
+  it("puts nothing but tabs in the tablist, so Tab passes through it once", () => {
+    // The tablist used to hold the actions menu and "New board" as well, giving
+    // it three tab stops where a tablist should offer one. Caught by
+    // `e2e/specs/accessibility.e2e.ts`; asserted here so it cannot come back.
+    setup([makeBoard("b1", "Board", 0), makeBoard("b2", "Ideas", 1)], "b2");
+
+    const tablist = screen.getByRole("tablist", { name: "Boards" });
+    const stops = Array.from(tablist.querySelectorAll("button")).filter(
+      (button) => button.getAttribute("tabindex") !== "-1",
+    );
+
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toHaveAccessibleName("Ideas");
+  });
+
+  it("offers no board actions when no board is open", () => {
+    setup([makeBoard("b1", "Board", 0)], null);
+
+    expect(screen.queryByRole("button", { name: /^Actions for/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New board" })).toBeInTheDocument();
   });
 
   it("reports the board the user picked", async () => {

@@ -121,8 +121,8 @@ export function CommandPalette({ commands, onOpenTask, onOpenChange }: CommandPa
   return (
     <Dialog open onOpenChange={onOpenChange} title="Search and commands">
       <div className="space-y-3">
-        <div className="border-border-default focus-within:border-accent-border flex items-center gap-2 rounded-md border px-2">
-          <Search size={14} aria-hidden className="text-fg-tertiary shrink-0" />
+        <div className="border-border-strong focus-within:border-accent-border focus-within:outline-focus-ring focus-within:outline-2 focus-within:outline-offset-2 flex items-center gap-2 rounded-md border px-2">
+          <Search size={14} aria-hidden className="text-fg-secondary shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -138,7 +138,7 @@ export function CommandPalette({ commands, onOpenTask, onOpenChange }: CommandPa
               setQuery(event.target.value);
             }}
             onKeyDown={handleKeyDown}
-            className="text-fg-primary placeholder:text-fg-tertiary min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"
+            className="text-fg-primary placeholder:text-fg-secondary min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"
           />
         </div>
 
@@ -160,10 +160,10 @@ export function CommandPalette({ commands, onOpenTask, onOpenChange }: CommandPa
                 onHover={setActive}
                 onSelect={choose}
               >
-                <Icon size={13} aria-hidden className="text-fg-tertiary shrink-0" />
+                <Icon size={13} aria-hidden className="text-fg-secondary shrink-0" />
                 <span className="text-fg-primary flex-1 truncate">{command.label}</span>
                 {command.hint === undefined ? null : (
-                  <span className="text-fg-tertiary shrink-0 text-2xs">{command.hint}</span>
+                  <span className="text-fg-secondary shrink-0 text-2xs">{command.hint}</span>
                 )}
               </Row>
             );
@@ -180,12 +180,12 @@ export function CommandPalette({ commands, onOpenTask, onOpenChange }: CommandPa
                 onHover={setActive}
                 onSelect={choose}
               >
-                <span className="text-fg-tertiary shrink-0 font-mono text-2xs" data-numeric>
+                <span className="text-fg-secondary shrink-0 font-mono text-2xs" data-numeric>
                   {hit.projectKeyPrefix}-{hit.number}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="text-fg-primary block truncate">{hit.title}</span>
-                  <span className="text-fg-tertiary block truncate text-2xs">
+                  <span className="text-fg-secondary block truncate text-2xs">
                     {hit.projectName} · {hit.boardName} · {hit.columnName}
                     {hit.archived ? " · archived" : ""}
                     {hit.excerpt === "" ? "" : ` — ${hit.excerpt}`}
@@ -196,7 +196,7 @@ export function CommandPalette({ commands, onOpenTask, onOpenChange }: CommandPa
           })}
         </div>
 
-        <p role="status" className="text-fg-tertiary flex items-center gap-1.5 text-2xs">
+        <p role="status" className="text-fg-secondary flex items-center gap-1.5 text-2xs">
           {results.isError ? (
             <span className="text-danger-fg">{messageFor(results.error)}</span>
           ) : trimmed === "" ? (

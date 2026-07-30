@@ -24,7 +24,7 @@ export function ThemeControl({ value, onChange, busy = false }: ThemeControlProp
   return (
     <fieldset className="m-0 border-0 p-0" disabled={busy}>
       <legend className="sr-only">Theme</legend>
-      <div className="border-border-default bg-surface-card inline-flex rounded-md border p-px">
+      <div className="border-border-strong bg-surface-card inline-flex rounded-md border p-px">
         {OPTIONS.map((option) => {
           const selected = option.value === value;
           return (

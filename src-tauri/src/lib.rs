@@ -57,6 +57,7 @@ pub fn run() {
             commands::database::backup_create,
             commands::preferences::preferences_get,
             commands::preferences::preferences_set_theme,
+            commands::preferences::window_set_theme,
             commands::preferences::ui_state_get,
             commands::preferences::ui_state_set,
             commands::projects::projects_list,

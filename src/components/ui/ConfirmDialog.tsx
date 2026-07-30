@@ -59,7 +59,7 @@ export function ConfirmDialog({
           <div className="mt-5 flex justify-end gap-2">
             <AlertDialogPrimitive.Cancel
               className={cn(
-                "bg-surface-card text-fg-primary border-border-default hover:border-border-strong",
+                "bg-surface-card text-fg-primary border-border-strong hover:bg-surface-sunken",
                 "inline-flex h-8 cursor-default items-center rounded-md border px-3 text-xs font-medium",
               )}
             >

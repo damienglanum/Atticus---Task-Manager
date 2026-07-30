@@ -17,6 +17,29 @@ pub enum ThemePreference {
     System,
 }
 
+/// A preference with "system" already decided.
+///
+/// Distinct from `ThemePreference` on purpose: the window chrome cannot be told
+/// to "follow the system", it has to be told which of the two to paint. Having
+/// the type refuse to carry "system" is what stops the frontend and the backend
+/// resolving it separately and disagreeing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "ResolvedTheme.ts")]
+pub enum ResolvedTheme {
+    Light,
+    Dark,
+}
+
+impl From<ResolvedTheme> for tauri::Theme {
+    fn from(theme: ResolvedTheme) -> Self {
+        match theme {
+            ResolvedTheme::Light => tauri::Theme::Light,
+            ResolvedTheme::Dark => tauri::Theme::Dark,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "Preferences.ts")]
@@ -39,6 +62,24 @@ pub fn preferences_set_theme(
     let database = state.database()?;
     app_state::set(database.connection(), THEME_KEY, &theme)?;
     Ok(Preferences { theme })
+}
+
+/// Repaints the window chrome to match the theme the interface is drawing.
+///
+/// macOS draws the titlebar from the *window's* theme, which Tauri leaves at the
+/// system value; only the web contents follow the application's preference. A
+/// user who runs the OS in dark mode and chooses the light theme therefore gets
+/// a dark bar above a light interface — defect V-1 in `docs/visual-review.md`,
+/// found in milestone 3 and fixed here.
+///
+/// Takes the resolved theme rather than the preference: the frontend already
+/// turned "system" into one of the two in order to set the document class, and
+/// deciding it twice is how the bar and the board come to disagree.
+#[tauri::command]
+pub fn window_set_theme(window: tauri::WebviewWindow, theme: ResolvedTheme) -> AppResult<()> {
+    window
+        .set_theme(Some(theme.into()))
+        .map_err(|error| AppError::internal(format!("could not set the window theme: {error}")))
 }
 
 /// Keys the webview may read and write in `app_state`.
@@ -76,6 +117,30 @@ pub fn ui_state_set(state: State<'_, AppState>, key: String, value: String) -> A
 mod tests {
     use super::*;
     use crate::db::Database;
+
+    #[test]
+    fn a_resolved_theme_maps_onto_the_window_theme_it_names() {
+        // The two enums are separate types precisely so this mapping is written
+        // once. If a variant is ever added, this stops compiling rather than
+        // silently painting the bar the wrong colour.
+        assert_eq!(
+            tauri::Theme::from(ResolvedTheme::Light),
+            tauri::Theme::Light
+        );
+        assert_eq!(tauri::Theme::from(ResolvedTheme::Dark), tauri::Theme::Dark);
+    }
+
+    #[test]
+    fn the_resolved_theme_cannot_carry_system() {
+        // Serialising is how it reaches the frontend, so this is the shape the
+        // binding promises: two values, and no way to ask for "whatever the OS
+        // says" at a layer that has to answer with a colour.
+        assert_eq!(
+            serde_json::to_string(&ResolvedTheme::Light).expect("serialises"),
+            "\"light\""
+        );
+        assert!(serde_json::from_str::<ResolvedTheme>("\"system\"").is_err());
+    }
 
     #[test]
     fn the_theme_defaults_to_following_the_system() {

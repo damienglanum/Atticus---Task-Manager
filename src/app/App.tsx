@@ -54,7 +54,16 @@ export function App() {
     queryFn: () => ipc.preferencesGet(),
   });
   const theme: ThemePreference = preferences.data?.theme ?? "system";
-  useEffect(() => applyThemePreference(theme), [theme]);
+  useEffect(
+    () =>
+      applyThemePreference(theme, (resolved) => {
+        // Best-effort and deliberately unawaited: the interface has already
+        // repainted, and a titlebar that stayed the wrong colour is not worth
+        // a toast over the work the user was actually doing.
+        void ipc.windowSetTheme(resolved).catch(() => undefined);
+      }),
+    [theme],
+  );
 
   const setTheme = useMutation({
     mutationFn: (next: ThemePreference) => ipc.preferencesSetTheme(next),
@@ -240,13 +249,13 @@ export function App() {
 
         <main className="min-h-0 flex-1">
           {workspace.isPending || projects.isPending ? (
-            <p role="status" className="text-fg-tertiary p-6 text-xs">
+            <p role="status" className="text-fg-secondary p-6 text-xs">
               Opening your workspace…
             </p>
           ) : selectedProject === null ? (
             <NoProjectYet />
           ) : selectedBoardId === null ? (
-            <p className="text-fg-tertiary p-6 text-xs">
+            <p className="text-fg-secondary p-6 text-xs">
               This project has no board open. Choose one above.
             </p>
           ) : (

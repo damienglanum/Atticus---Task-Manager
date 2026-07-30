@@ -11,6 +11,7 @@ code is improved and passes when the product is broken — the opposite of what 
 | Rust unit        | `cargo test`               | Pure functions, in-memory SQLite    | Domain rules, validation, ordering algebra                |
 | Rust integration | `cargo test`               | **Real SQLite files on disk**       | Migrations, backups, transactions, foreign keys           |
 | Component        | `vitest` + Testing Library | React in jsdom, IPC replaced        | Markup, labelling, keyboard behaviour, error rendering    |
+| Stylesheet       | `vitest` (node)            | **`tokens.css` and the Radix files**| Contrast ratios, motion under a media query               |
 | End-to-end       | `wdio`                     | **The built binary, real database** | That the assembled product does the thing                 |
 
 The distinction between the last two matters and is easy to blur. A component test renders the same
@@ -56,7 +57,7 @@ frontend bundle the packaged app ships. A debug binary renders a blank window un
 happens to be running, which is how this was discovered.
 
 **It builds into `target/e2e`.** `tauri dev` and `cargo build` both write
-`target/debug/takenkanban`. Sharing that path meant a `tauri dev` in another terminal silently
+`target/debug/atticus`. Sharing that path meant a `tauri dev` in another terminal silently
 replaced the WebDriver-enabled binary between building it and running it — the resulting "the plugin
 does not work" was a build-artefact collision, not a plugin problem.
 
@@ -76,6 +77,20 @@ That assertion reads the filesystem rather than the path the app displays. Readi
 the UI was tried and is wrong twice over: WebKit's rendered-text extraction inserts the soft line
 breaks of a wrapped path, and a path containing a space — `Application Support`, on this very
 platform — cannot be reconstructed from rendered text at all.
+
+### Window sizes are in physical pixels, layout is not
+
+`browser.setWindowRect` on this driver takes **physical** pixels. Layout, media queries and every
+`min-w-` are in CSS pixels. On a 2× display those differ by a factor of two, and the whole
+responsive suite quietly tested half of what it claimed: the "900 px narrow window" laid out at
+450 px, under the 900 px minimum product-spec §6 supports, and failed an overflow assertion for it.
+
+Use `setViewportWidth(cssWidth, cssHeight)` from `support/app.ts`. It converts through
+`devicePixelRatio` and then waits for `document.documentElement.clientWidth` to actually read the
+width asked for, so a spec that says 900 either gets 900 or fails saying what it got. The window is
+allowed to be larger than the display, so 1920 CSS px is reachable on a 1920 physical screen.
+
+Measured across 900 / 1280 / 1800 / 1920 / 2560 / 3840 and linear throughout.
 
 ### Writing specs
 
@@ -127,11 +142,46 @@ index arithmetic itself has eighteen unit tests in `src/features/board/reorder.t
 It is listed as a gap in the M5 acceptance criteria and in the README's known limitations, rather
 than being counted as passing.
 
+### Tab traversal is not covered either, and why
+
+The same shape of gap as pointer drag, found in milestone 8 while trying to walk the interface with
+`Tab` and press `Enter` on what it landed on.
+
+Dispatched `Tab` never moved focus: a walk instrumented to report where it had been visited the same
+control eighty times. `Enter` on a control focused through `browser.execute` did not activate it
+either. Three explanations were tried and each was disproved by measuring it — that macOS keyboard
+navigation was off (the button focuses fine), that focus is lost between WebDriver commands (it
+survives), and that the dialog fails to restore focus (it restores to whatever actually had it).
+
+**The cause is now measured rather than inferred.** A `keydown` listener attached to a focused button
+*does* see `Enter` arrive from `browser.keys`. So the events reach the DOM; what WKWebView does not
+do for a synthetic key is perform its **default action**, and focus navigation is `Tab`'s default
+action. Three dispatch mechanisms were tried against the same probe — `browser.keys`,
+`performActions` with a raw ``, and `elementSendKeys` — and focus did not move for any of
+them, while the listener saw the key each time. One cause, not an instability.
+
+So a driven Tab walk is not achievable here, and the property it would have established is asserted
+structurally instead, on the real laid-out document: *leaves every control in the tab order, in
+document order* in `accessibility.e2e.ts` checks that no element carries a positive `tabindex`, that
+nothing interactive is stranded at `tabindex="-1"` outside a composite widget, and that each
+composite offers exactly one entry point. With no positive `tabindex` anywhere, tab order **is**
+document order — which is what product-spec §10 asks for, without needing to walk it.
+
+That assertion found a real defect on its first run: the board tablist had three tab stops.
+
+Enter-to-activate remains covered in the component layer, where `user-event` implements it. What
+else is driven end to end is arrow-key navigation inside a Radix menu — Radix tracks its own
+highlighted row rather than relying on the browser — which is how `accessibility.e2e.ts` asserts the
+keyboard focus ring against a real renderer.
+
 ## What is not yet covered
 
 Honest list, kept current:
 
 - **Pointer drag** — see above.
+- **A driven Tab walk and Enter-to-activate, end to end** — see above. The cause is now known, and
+  keyboard *reachability* is asserted structurally end to end rather than left to the component
+  layer alone.
 - **The system file dialog is never opened by a test.** `ipc.pickFile` is mocked in component tests
   and not exercised end to end at all: the dialog is a native window the WebDriver session cannot
   reach. What is covered is everything either side of it — path validation and canonicalisation in

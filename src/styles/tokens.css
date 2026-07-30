@@ -70,31 +70,53 @@
   --color-surface-raised: #ffffff;
   --color-surface-sunken: var(--slate-3);
 
-  /* ── Foreground ─────────────────────────────────────────────────────────── */
+  /* ── Foreground ─────────────────────────────────────────────────────────────
+     Two text steps, not three. Radix's scales offer exactly two guaranteed
+     accessible text steps — 11 and 12 — and step 10 is a hovered solid, not a
+     text colour: `contrast.test.ts` measured it at 3.33:1 on our own surfaces.
+     This matches what the design actually asks for (design-decisions.md §3:
+     the title carries full contrast, everything else sits one step down). */
   --color-fg-primary: var(--slate-12);
   --color-fg-secondary: var(--slate-11);
-  --color-fg-tertiary: var(--slate-10);
+  /* Disabled and inactive controls only, which WCAG 2.2 SC 1.4.3 exempts.
+     Never for text a user is meant to read. */
+  --color-fg-muted: var(--slate-10);
 
-  /* ── Borders ────────────────────────────────────────────────────────────── */
+  /* ── Borders ────────────────────────────────────────────────────────────────
+     `strong` is the boundary of an interactive control, so it carries the 3:1
+     that SC 1.4.11 requires of anything that identifies one. `subtle` and
+     `default` separate content that identifies itself, and are lighter. */
   --color-border-subtle: var(--slate-5);
   --color-border-default: var(--slate-7);
-  --color-border-strong: var(--slate-8);
+  --color-border-strong: var(--slate-10);
 
   /* ── Accent — the only saturated colour in the chrome ───────────────────── */
+  /* The label on a solid fill. A token rather than `text-white` at each call
+     site so `contrast.test.ts` measures the value the buttons actually use. */
+  --color-on-solid: #ffffff;
   --color-accent-solid: var(--indigo-9);
   --color-accent-fg: var(--indigo-11);
   --color-accent-bg: var(--indigo-3);
   --color-accent-border: var(--indigo-7);
 
   /* ── Status ─────────────────────────────────────────────────────────────── */
-  --color-danger-solid: var(--red-9);
+  /* Pinned rather than `var(--red-9)`. A solid fill carrying a white label has
+     the same contrast in both themes — white is white — so the step has to be
+     chosen once, for both. Red 9 is Radix's brand step and measures 3.91:1
+     against white; this is light-theme red 11, which measures 5.21:1, the same
+     as white on the accent solid. Radix pins its own step 9 across themes for
+     the same class of reason. */
+  --color-danger-solid: #ce2c31;
   --color-danger-fg: var(--red-11);
   --color-danger-bg: var(--red-3);
   --color-danger-border: var(--red-7);
-  --color-warning-fg: var(--amber-11);
+  /* Amber 12 in light, amber 11 in dark. Radix tunes step 11 with APCA, and the
+     divergence from WCAG 2's ratio is widest in the bright yellows: light
+     amber 11 measures 4.05:1 on our sunken surface. Dark amber 11 has no such
+     problem (9.42:1 at worst), and dark amber 12 is a pale cream that stops
+     reading as amber at all. So the step differs by theme and the hue does not. */
+  --color-warning-fg: var(--amber-12);
   --color-warning-bg: var(--amber-3);
-  --color-success-fg: var(--grass-11);
-  --color-success-bg: var(--grass-3);
 }
 
 /* Dark theme overrides. Radix supplies the scale values; only the surface
@@ -106,11 +128,18 @@
   --color-surface-card: var(--slate-3);
   --color-surface-raised: var(--slate-4);
   --color-surface-sunken: var(--slate-1);
+
+  /* See the note beside the light value. */
+  --color-warning-fg: var(--amber-11);
 }
 
 @theme {
-  /* ── Focus ring — one ring, used identically everywhere ─────────────────── */
-  --color-focus-ring: var(--indigo-9);
+  /* ── Focus ring — one ring, used identically everywhere ───────────────────
+     Step 11, not the step 9 accent. The ring has to clear 3:1 against whatever
+     it is drawn over, and step 9 fell to 2.77:1 on the raised surface in the
+     dark theme — measured, not assumed. Step 11 is a paired scale, so one
+     token covers both themes: 5.27:1 at worst in light, 7.00:1 in dark. */
+  --color-focus-ring: var(--indigo-11);
 }
 
 :root {

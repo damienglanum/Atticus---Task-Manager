@@ -39,7 +39,7 @@ export function ArchivePanel({
       description="Restoring a task puts it back at the end of the column it was archived from."
     >
       {archived.isPending ? (
-        <p role="status" className="text-fg-tertiary text-xs">
+        <p role="status" className="text-fg-secondary text-xs">
           Loading the archive…
         </p>
       ) : archived.isError ? (
@@ -55,7 +55,7 @@ export function ArchivePanel({
             <li key={task.id} className="flex items-start gap-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="text-fg-primary text-xs break-words">{task.title}</p>
-                <p className="text-fg-tertiary mt-0.5 font-mono text-2xs" data-numeric>
+                <p className="text-fg-secondary mt-0.5 font-mono text-2xs" data-numeric>
                   {projectPrefix}-{task.number}
                 </p>
               </div>

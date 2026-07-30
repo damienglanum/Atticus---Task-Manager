@@ -37,7 +37,7 @@ export function FileRefList({
       </h3>
 
       {fileRefs.length === 0 ? (
-        <p className="text-fg-tertiary text-xs">
+        <p className="text-fg-secondary text-xs">
           No files linked. Linking records the path — the file itself is never copied.
         </p>
       ) : (
@@ -52,7 +52,7 @@ export function FileRefList({
               }`}
             >
               {fileRef.found ? (
-                <Paperclip size={13} aria-hidden className="text-fg-tertiary mt-0.5 shrink-0" />
+                <Paperclip size={13} aria-hidden className="text-fg-secondary mt-0.5 shrink-0" />
               ) : (
                 <AlertTriangle size={13} aria-hidden className="text-warning-fg mt-0.5 shrink-0" />
               )}
@@ -62,7 +62,7 @@ export function FileRefList({
                 {fileRef.found ? null : (
                   <>
                     <p className="text-warning-fg text-2xs">Missing — this file is not there now</p>
-                    <p className="text-fg-tertiary font-mono text-2xs break-all">{fileRef.path}</p>
+                    <p className="text-fg-secondary font-mono text-2xs break-all">{fileRef.path}</p>
                   </>
                 )}
               </div>

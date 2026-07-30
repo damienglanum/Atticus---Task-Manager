@@ -42,7 +42,7 @@ export function SubtaskList({ subtasks, onAdd, onToggle, onRename, onDelete }: S
           Subtasks
         </h3>
         {subtasks.length > 0 ? (
-          <span className="text-fg-tertiary font-mono text-2xs" data-numeric>
+          <span className="text-fg-secondary font-mono text-2xs" data-numeric>
             {done}/{subtasks.length}
           </span>
         ) : null}
@@ -73,8 +73,8 @@ export function SubtaskList({ subtasks, onAdd, onToggle, onRename, onDelete }: S
                   if (next !== "" && next !== subtask.title) onRename(subtask, next);
                   else event.target.value = subtask.title;
                 }}
-                className={`text-fg-primary min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-xs outline-none ${
-                  subtask.done ? "text-fg-tertiary line-through" : ""
+                className={`text-fg-primary min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-xs ${
+                  subtask.done ? "text-fg-secondary line-through" : ""
                 }`}
               />
               <IconButton
@@ -98,7 +98,7 @@ export function SubtaskList({ subtasks, onAdd, onToggle, onRename, onDelete }: S
           submit();
         }}
       >
-        <Plus size={13} aria-hidden className="text-fg-tertiary shrink-0" />
+        <Plus size={13} aria-hidden className="text-fg-secondary shrink-0" />
         <input
           type="text"
           value={draft}
@@ -117,7 +117,7 @@ export function SubtaskList({ subtasks, onAdd, onToggle, onRename, onDelete }: S
               submit();
             }
           }}
-          className="text-fg-primary placeholder:text-fg-tertiary min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-xs outline-none"
+          className="text-fg-primary placeholder:text-fg-secondary min-w-0 flex-1 rounded-sm border border-transparent bg-transparent px-1 py-0.5 text-xs"
         />
       </form>
     </section>

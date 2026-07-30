@@ -60,7 +60,7 @@ export function LabelPicker({
       </h3>
 
       {available.length === 0 && !adding ? (
-        <p className="text-fg-tertiary text-xs">This project has no labels yet.</p>
+        <p className="text-fg-secondary text-xs">This project has no labels yet.</p>
       ) : (
         <ul className="space-y-0.5">
           {available.map((label) => {
@@ -109,7 +109,7 @@ export function LabelPicker({
             onChange={(event) => {
               setName(event.target.value);
             }}
-            className="border-border-default bg-surface-raised text-fg-primary w-full rounded-md border px-2 py-1 text-xs outline-none"
+            className="border-border-strong bg-surface-raised text-fg-primary w-full rounded-md border px-2 py-1 text-xs"
           />
 
           <fieldset className="flex flex-wrap gap-1">
@@ -158,7 +158,7 @@ export function LabelPicker({
           onClick={() => {
             setAdding(true);
           }}
-          className="text-fg-tertiary hover:text-fg-secondary flex cursor-default items-center gap-1.5 text-xs"
+          className="text-fg-secondary hover:text-fg-primary flex cursor-default items-center gap-1.5 text-xs"
         >
           <Plus size={12} aria-hidden />
           New label
@@ -166,7 +166,7 @@ export function LabelPicker({
       )}
 
       {selected.length === 0 ? null : (
-        <p className="text-fg-tertiary flex items-center gap-1 pt-1 text-2xs">
+        <p className="text-fg-secondary flex items-center gap-1 pt-1 text-2xs">
           <Tag size={11} aria-hidden />
           {selected.length} on this task
         </p>

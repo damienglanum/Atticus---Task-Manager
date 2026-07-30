@@ -1,6 +1,6 @@
 # Design decisions
 
-How researched patterns were synthesised into an original interface for Takenkanban.
+How researched patterns were synthesised into an original interface for Atticus.
 Research sources and what was accepted or rejected from each are in [`research.md`](research.md).
 
 ---
@@ -227,14 +227,14 @@ session.
   right-aligned metadata column (already in the foundations, because it is correct regardless), and
   B's single drag shadow, which A already reserves for exactly that purpose.
 
-## 6. Token structure (values filled in milestone 8)
+## 6. Token structure (values measured in milestone 8)
 
 Defined in `src/styles/tokens.css` as CSS custom properties inside Tailwind v4's `@theme`, so they
 are usable by Tailwind utilities *and* by plain CSS.
 
 | Group | Tokens |
 |---|---|
-| Colour | `--color-bg-{app,column,card,raised}`, `--color-fg-{primary,secondary,tertiary}`, `--color-border-{subtle,default,strong}`, `--color-accent-{fg,bg,solid}`, `--color-{priority,due,label}-*`, `--color-danger-*` |
+| Colour | `--color-surface-{app,column,card,raised,sunken}`, `--color-fg-{primary,secondary}` plus `--color-fg-muted`, `--color-border-{subtle,default,strong}`, `--color-accent-{fg,bg,solid,border}`, `--color-on-solid`, `--color-{priority,due,label}-*`, `--color-danger-*`, `--color-warning-*` |
 | Typography | `--font-{sans,mono}`, `--text-{2xs,xs,sm,base,lg}` each with a paired line-height, `--font-weight-{normal,medium,semibold}` |
 | Spacing | `--space-{1,2,3,4,6,8}` (4→32px). Six values, no others |
 | Radius | `--radius-{sm,md,lg}` = 2 / 4 / 8px |
@@ -245,3 +245,24 @@ are usable by Tailwind utilities *and* by plain CSS.
 | Z-index | `--z-{base,sticky,dropdown,overlay,dialog,toast}` = 0 / 10 / 20 / 30 / 40 / 50. Numbers appear nowhere else |
 
 Every one of these is verified by measurement in milestone 8, not by eye.
+
+### What the measurement changed
+
+`src/styles/contrast.test.ts` resolves the tokens through the same `var()` chain the browser
+follows and computes the WCAG 2.2 ratio for every pair the interface can actually produce, in both
+themes. Four of the assignments sketched above did not survive it:
+
+- **There is no third foreground step.** Radix guarantees two accessible text steps per scale. Step
+  10 measured 3.33:1 on our own surfaces, so `--color-fg-tertiary` is gone and `--color-fg-muted`
+  took its place, restricted to disabled and inactive states.
+- **The focus ring is step 11, not the step 9 accent**, which fell to 2.77:1 on the raised surface
+  in the dark theme. Step 11 is a paired scale, so one token still covers both themes.
+- **A control's boundary is step 10.** Step 8 measured 1.68:1. Container hairlines were left where
+  they were: SC 1.4.11 governs what identifies a *control*, and a dialog is identified by what is
+  in it.
+- **The danger solid is pinned rather than derived**, because white on a fill has the same contrast
+  in both themes and so cannot come from a scale that flips.
+
+The worst measured ratio in either theme is now 3.33:1 for a control boundary against a 3:1
+threshold, and 5.21:1 for text against 4.5:1. The numbers are printed by the test, not only
+asserted.

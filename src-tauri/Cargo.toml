@@ -1,5 +1,5 @@
 [package]
-name = "takenkanban"
+name = "atticus"
 version = "0.1.0"
 description = "A local-first Kanban task manager for personal software projects."
 authors = ["Damien"]
@@ -9,7 +9,7 @@ publish = false
 
 [lib]
 # The `_lib` suffix keeps the library name distinct from the binary name.
-name = "takenkanban_lib"
+name = "atticus_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

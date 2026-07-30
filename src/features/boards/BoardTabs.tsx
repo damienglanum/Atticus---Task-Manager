@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { IconButton } from "@/components/ui/Button";
+import { MenuContent, MenuItem } from "@/components/ui/Menu";
 import type { Board } from "@/lib/bindings/Board";
 import { cn } from "@/lib/cn";
 
@@ -32,13 +33,23 @@ export function BoardTabs({
 }: BoardTabsProps) {
   const canDelete = boards.length > 1;
 
+  const selectedBoard = boards.find((board) => board.id === selectedId) ?? null;
+
   return (
-    <div className="flex items-center gap-1" role="tablist" aria-label="Boards">
-      {boards.map((board) => {
-        const selected = board.id === selectedId;
-        return (
-          <div key={board.id} className="group relative flex items-center">
+    <div className="flex items-center gap-1">
+      {/* Only tabs live in here.
+
+          The actions menu and "New board" used to sit inside the tablist, which
+          gave it three tab stops: a tablist owns tabs and nothing else, and Tab
+          landed inside this one repeatedly instead of moving past it. Found by
+          the keyboard-order assertion in `e2e/specs/accessibility.e2e.ts` on its
+          first run. */}
+      <div className="flex items-center gap-1" role="tablist" aria-label="Boards">
+        {boards.map((board) => {
+          const selected = board.id === selectedId;
+          return (
             <button
+              key={board.id}
               type="button"
               role="tab"
               aria-selected={selected}
@@ -47,7 +58,7 @@ export function BoardTabs({
                 onSelect(board);
               }}
               className={cn(
-                "cursor-default rounded-md py-1 pr-6 pl-2 text-xs",
+                "cursor-default rounded-md px-2 py-1 text-xs",
                 selected
                   ? "bg-accent-bg text-accent-fg font-medium"
                   : "text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary",
@@ -55,55 +66,55 @@ export function BoardTabs({
             >
               {board.name}
             </button>
-
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <IconButton
-                  label={`Actions for ${board.name}`}
-                  className="absolute right-0 size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
-                >
-                  <MoreHorizontal size={12} aria-hidden />
-                </IconButton>
-              </DropdownMenu.Trigger>
-
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                  align="start"
-                  sideOffset={4}
-                  style={{ zIndex: "var(--z-dropdown)" }}
-                  className="bg-surface-raised border-border-default min-w-40 rounded-md border p-1 shadow-(--shadow-overlay)"
-                >
-                  <DropdownMenu.Item
-                    onSelect={() => {
-                      onRename(board);
-                    }}
-                    className="text-fg-primary data-highlighted:bg-surface-sunken flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none"
-                  >
-                    <Pencil size={13} aria-hidden />
-                    Rename board…
-                  </DropdownMenu.Item>
-
-                  {canDelete ? (
-                    <DropdownMenu.Item
-                      onSelect={() => {
-                        onDelete(board);
-                      }}
-                      className="text-danger-fg data-highlighted:bg-danger-bg flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none"
-                    >
-                      <Trash2 size={13} aria-hidden />
-                      Delete board…
-                    </DropdownMenu.Item>
-                  ) : null}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
       <IconButton label="New board" onClick={onCreate}>
         <Plus size={14} aria-hidden />
       </IconButton>
+
+      {/* One menu, acting on the board that is open.
+
+          Previously each tab carried its own, revealed on hover — which meant
+          the only pointer-free route to it was a tab stop inside the tablist.
+          Renaming the board you are looking at is the whole of the use case, and
+          this way the control is an ordinary, permanently visible tab stop
+          rather than something that appears when the mouse passes over it. */}
+      {selectedBoard === null ? null : (
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <IconButton label={`Actions for ${selectedBoard.name}`}>
+              <MoreHorizontal size={12} aria-hidden />
+            </IconButton>
+          </DropdownMenu.Trigger>
+
+          <DropdownMenu.Portal>
+            <MenuContent align="start" className="min-w-40">
+              <MenuItem
+                onSelect={() => {
+                  onRename(selectedBoard);
+                }}
+              >
+                <Pencil size={13} aria-hidden />
+                Rename board…
+              </MenuItem>
+
+              {canDelete ? (
+                <MenuItem
+                  destructive
+                  onSelect={() => {
+                    onDelete(selectedBoard);
+                  }}
+                >
+                  <Trash2 size={13} aria-hidden />
+                  Delete board…
+                </MenuItem>
+              ) : null}
+            </MenuContent>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      )}
     </div>
   );
 }

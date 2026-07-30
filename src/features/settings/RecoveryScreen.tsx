@@ -13,7 +13,7 @@ export function RecoveryScreen({ error }: { error: AppError }) {
 
   return (
     <div role="alert" className="mx-auto max-w-2xl py-12">
-      <h2 className="text-lg font-semibold">Takenkanban couldn&rsquo;t open your database.</h2>
+      <h2 className="text-lg font-semibold">Atticus couldn&rsquo;t open your database.</h2>
 
       <p className="text-fg-secondary mt-3">{describeAppError(error)}</p>
 
@@ -33,7 +33,7 @@ export function RecoveryScreen({ error }: { error: AppError }) {
         </div>
       ) : null}
 
-      <p className="text-fg-tertiary mt-6 text-xs">
+      <p className="text-fg-secondary mt-6 text-xs">
         Nothing was deleted. If this keeps happening, quit the application and copy the files above
         somewhere safe before trying again.
       </p>

@@ -33,6 +33,7 @@ import type { Preferences } from "./bindings/Preferences";
 import type { Project } from "./bindings/Project";
 import type { ProjectCreated } from "./bindings/ProjectCreated";
 import type { ProjectPatch } from "./bindings/ProjectPatch";
+import type { ResolvedTheme } from "./bindings/ResolvedTheme";
 import type { NewTask } from "./bindings/NewTask";
 import type { Task } from "./bindings/Task";
 import type { TaskPatch } from "./bindings/TaskPatch";
@@ -57,6 +58,9 @@ export const ipc = {
   preferencesGet: () => call<Preferences>("preferences_get"),
   preferencesSetTheme: (theme: ThemePreference) =>
     call<Preferences>("preferences_set_theme", { theme }),
+  // The titlebar is drawn by macOS from the window's own theme, not from the
+  // web contents. See `window_set_theme` in Rust.
+  windowSetTheme: (theme: ResolvedTheme) => call<null>("window_set_theme", { theme }),
 
   // Interface state the frontend owns the shape of. Every key is stored under a
   // `ui:` prefix in Rust, so this can never overwrite the workspace or theme.

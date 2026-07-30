@@ -80,7 +80,7 @@ export function ProjectSidebar({
                 setShowArchived((value) => !value);
               }}
               aria-expanded={showArchived}
-              className="text-fg-tertiary hover:text-fg-secondary flex w-full cursor-default items-center justify-between rounded-md px-2 py-1 text-2xs font-semibold tracking-[0.06em] uppercase"
+              className="text-fg-secondary hover:text-fg-primary flex w-full cursor-default items-center justify-between rounded-md px-2 py-1 text-2xs font-semibold tracking-[0.06em] uppercase"
             >
               <span>Archived</span>
               <span data-numeric>{archived.length}</span>
@@ -112,7 +112,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <div className="px-2 py-6">
       <p className="text-fg-primary text-xs font-medium">No projects yet</p>
-      <p className="text-fg-tertiary mt-1 text-2xs">
+      <p className="text-fg-secondary mt-1 text-2xs">
         A project holds boards, columns, and tasks. Most people start with one per repository.
       </p>
       {/* Deliberately not "New project": the header already has a control with

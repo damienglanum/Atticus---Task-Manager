@@ -65,7 +65,7 @@ export function SettingsDialog({
             Couldn&rsquo;t read the database details.
           </p>
         ) : (
-          <p role="status" className="text-fg-tertiary text-xs">
+          <p role="status" className="text-fg-secondary text-xs">
             Reading database details…
           </p>
         )}
@@ -79,7 +79,7 @@ export function SettingsDialog({
           >
             {backup.isPending ? "Backing up…" : "Back up now"}
           </Button>
-          <p className="text-fg-tertiary mt-2 text-2xs">
+          <p className="text-fg-secondary mt-2 text-2xs">
             Writes a timestamped copy beside the database. A backup is also taken automatically
             before any schema change.
           </p>

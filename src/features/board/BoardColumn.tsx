@@ -108,7 +108,7 @@ export function BoardColumn({
         <span
           className={cn(
             "shrink-0 font-mono text-2xs",
-            overLimit ? "text-warning-fg font-semibold" : "text-fg-tertiary",
+            overLimit ? "text-warning-fg font-semibold" : "text-fg-secondary",
           )}
           data-numeric
         >
@@ -187,7 +187,7 @@ export function BoardColumn({
                 </MenuItem>
                 {canDelete ? null : (
                   // Says why rather than leaving a dead-looking control (US-6 AC5).
-                  <p className="text-fg-tertiary px-2 pt-0.5 pb-1 text-2xs">
+                  <p className="text-fg-secondary px-2 pt-0.5 pb-1 text-2xs">
                     A board needs at least one column.
                   </p>
                 )}
@@ -248,7 +248,7 @@ export function BoardColumn({
           onClick={() => {
             setComposing(true);
           }}
-          className="text-fg-tertiary hover:bg-surface-sunken hover:text-fg-secondary m-1.5 mt-0 flex cursor-default items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs"
+          className="text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary m-1.5 mt-0 flex cursor-default items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs"
         >
           <Plus size={13} aria-hidden />
           Add a task

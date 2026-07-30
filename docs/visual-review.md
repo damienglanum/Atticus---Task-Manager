@@ -8,12 +8,53 @@ captured).
 Capture method, for reproducibility:
 
 ```bash
-screencapture -x -o -l "$(./winid "$(pgrep -f 'target/debug/takenkanban')")" out.png
+screencapture -x -o -l "$(./winid "$(pgrep -f 'target/debug/atticus')")" out.png
 ```
 
 `winid` is a six-line Swift helper that reads `CGWindowListCopyWindowInfo` and prints the id of the
 layer-0 window owned by a pid. It lives in the scratchpad, not the repository: it is a reviewer's
 tool, not part of the product.
+
+---
+
+## M8 — Theme, accessibility, responsive · 2026-07-30
+
+**The first review at the widths it claims.** Every earlier entry on this page — M4's three sizes
+included — was captured at half the stated width, because the driver resizes in physical pixels and
+this display is 2×. The M4 row "Narrow, 900 × 700" was a 450 px viewport. Those results are not
+withdrawn, but they are evidence about a narrower window than they say, and the shots below replace
+them.
+
+| State                          | Result                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| 900 × 700, dark                | Pass — sidebar and filter bar intact, the board scrolls inside itself   |
+| 1280 × 820, dark               | Pass                                                                   |
+| 1680 × 1000, dark              | Pass                                                                   |
+| 1920 × 1080, dark              | Pass — the extra room becomes empty space, columns stay 300 px          |
+| 1280 × 820, light              | Pass — V-1 gone; the titlebar follows the app theme                     |
+| 1280 × 820, greyscale          | Pass — every signal still readable with the colour removed              |
+
+At 900 px the filter bar still fits on one row with all five facet controls and the search field.
+That is the width the previous overflow failure was really about: at 450 px it does not fit, and
+450 px is half what product-spec §6 undertakes to support.
+
+Asserted rather than eyeballed, and now at the real widths: the document itself never scrolls
+sideways, and the assertion names any box that overhangs rather than reporting a bare `false`.
+
+**The greyscale shot is the one to look at.** With the colour gone, the breached column still reads
+`⚠ In Progress 2/1` with a heavier border, priority still reads `⌃ High`, the label chip still
+carries its name beside its dot, and subtasks still read `☑ 1/3`. That is design-decisions.md §3's
+promise — no signal carried by colour alone — photographed rather than asserted. The assertions that
+can actually fail live in `src/features/board/greyscale.test.ts`.
+
+### Changed on review
+
+**The board tab strip lost its hover-only menu.** Each tab carried a "…" revealed on hover, which
+put a second and third tab stop inside `role="tablist"`. It is now one permanently visible control
+after the tabs, acting on the open board — visible in every shot above as `Board  +  ⋯`.
+
+**The due-date field says "No due date".** WebKit greys today's date inside an empty date input, so
+the editor made an unset due date look like one due today. Carried over from M6 and closed here.
 
 ---
 

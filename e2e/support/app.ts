@@ -52,6 +52,38 @@ export async function waitForAppReady(): Promise<void> {
   await $('button[aria-label="Settings"]').waitForDisplayed({ timeout: 20_000 });
 }
 
+/**
+ * Sizes the window so the *CSS viewport* is `cssWidth` wide, and proves it.
+ *
+ * `setWindowRect` on this driver is in **physical** pixels, while layout — and
+ * therefore every media query, every `min-w-` and the whole responsive design —
+ * is in CSS pixels. On a 2× display those differ by exactly a factor of two,
+ * measured across six widths from 900 to 3840 and linear throughout.
+ *
+ * Every width this suite claimed to inspect was therefore half of what it said:
+ * the "900 px narrow window" laid out at 450 px, well under the 900 px minimum
+ * product-spec §6 supports, and the overflow it reported was the interface
+ * being asked to do something it never promised. Milestone 8 requires 900 /
+ * 1280 / 1920 *inspected*, so the widths have to be the real ones.
+ *
+ * The window may exceed the display — 3840 physical on a 1920 physical screen
+ * yields a true 1920 px viewport — so all three are reachable here.
+ *
+ * The measurement is asserted rather than assumed: a resize is asynchronous,
+ * and reading the layout before it lands measures the previous width.
+ */
+export async function setViewportWidth(cssWidth: number, cssHeight: number): Promise<void> {
+  const ratio = await browser.execute(() => window.devicePixelRatio);
+  await browser.setWindowRect(null, null, cssWidth * ratio, cssHeight * ratio);
+
+  await browser.waitUntil(
+    async () => (await browser.execute(() => document.documentElement.clientWidth)) === cssWidth,
+    {
+      timeoutMsg: `the viewport never reached ${String(cssWidth)} CSS px (device pixel ratio ${String(ratio)})`,
+    },
+  );
+}
+
 export async function openSettings(): Promise<void> {
   await waitForAppReady();
 

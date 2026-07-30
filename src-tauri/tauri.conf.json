@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Takenkanban",
+  "productName": "Atticus - Task Manager",
   "version": "0.1.0",
   "identifier": "nl.synaptica.takenkanban",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Takenkanban",
+        "title": "Atticus - Task Manager",
         "width": 1440,
         "height": 900,
         "minWidth": 900,

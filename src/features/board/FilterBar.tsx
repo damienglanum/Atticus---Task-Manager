@@ -2,7 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Bookmark, Filter, Search, Trash2, X } from "lucide-react";
 
 import { Button, IconButton } from "@/components/ui/Button";
-import { MenuContent, MenuItem, MenuSeparator } from "@/components/ui/Menu";
+import { MenuCheckboxItem, MenuContent, MenuItem, MenuSeparator } from "@/components/ui/Menu";
 import type { Column } from "@/lib/bindings/Column";
 import type { Label } from "@/lib/bindings/Label";
 import type { SavedFilter } from "@/lib/bindings/SavedFilter";
@@ -58,8 +58,8 @@ export function FilterBar({
 
   return (
     <div className="border-border-subtle flex items-center gap-2 border-b px-3 py-1.5">
-      <div className="border-border-default focus-within:border-accent-border flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1">
-        <Search size={12} aria-hidden className="text-fg-tertiary shrink-0" />
+      <div className="border-border-strong focus-within:border-accent-border focus-within:outline-focus-ring focus-within:outline-2 focus-within:outline-offset-2 flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1">
+        <Search size={12} aria-hidden className="text-fg-secondary shrink-0" />
         <input
           type="text"
           aria-label="Filter tasks on this board"
@@ -68,7 +68,11 @@ export function FilterBar({
           onChange={(event) => {
             onChange({ ...filter, text: event.target.value });
           }}
-          className="text-fg-primary placeholder:text-fg-tertiary min-w-0 flex-1 bg-transparent text-xs outline-none"
+          // `h-6` rather than letting the line height decide: the field is the
+          // target, and it laid out at 18 px tall, under the 24 px SC 2.5.8 asks
+          // for. Measured by `accessibility.e2e.ts`, which is the only layer
+          // that can see a laid-out box at all.
+          className="text-fg-primary placeholder:text-fg-secondary h-6 min-w-0 flex-1 bg-transparent text-xs outline-none"
           size={12}
         />
       </div>
@@ -133,7 +137,7 @@ export function FilterBar({
         <DropdownMenu.Portal>
           <MenuContent align="start" className="min-w-56">
             {savedFilters.length === 0 ? (
-              <p className="text-fg-tertiary px-2 py-1.5 text-xs">
+              <p className="text-fg-secondary px-2 py-1.5 text-xs">
                 No saved filters in this project yet.
               </p>
             ) : (
@@ -221,23 +225,17 @@ function FacetMenu({
       <DropdownMenu.Portal>
         <MenuContent align="start">
           {options.map((option) => (
-            <DropdownMenu.CheckboxItem
+            <MenuCheckboxItem
               key={option.id}
               checked={selected.includes(option.id)}
               onCheckedChange={() => {
                 onToggle(option.id);
               }}
-              onSelect={(event) => {
-                // Kept open: choosing several values in one facet is the normal
-                // case, and reopening the menu between each would be tedious.
-                event.preventDefault();
-              }}
-              className="text-fg-primary data-highlighted:bg-surface-sunken flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none"
             >
               <span
                 aria-hidden
                 className={cn(
-                  "border-border-default flex size-3 shrink-0 items-center justify-center rounded-xs border",
+                  "border-border-strong flex size-3 shrink-0 items-center justify-center rounded-xs border",
                   selected.includes(option.id) ? "bg-accent-bg border-accent-border" : "",
                 )}
               >
@@ -245,7 +243,7 @@ function FacetMenu({
               </span>
               {option.dot === undefined ? null : <LabelDot color={option.dot} />}
               <span className="truncate">{option.label}</span>
-            </DropdownMenu.CheckboxItem>
+            </MenuCheckboxItem>
           ))}
         </MenuContent>
       </DropdownMenu.Portal>

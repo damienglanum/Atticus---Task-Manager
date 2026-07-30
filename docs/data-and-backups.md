@@ -89,7 +89,7 @@ Your original database is left exactly as it was. The backup is a second copy, n
 
 ## 5. If the app refuses to open your database
 
-You will see: *"This database was written by a newer version of Takenkanban (schema N); this build
+You will see: *"This database was written by a newer version of Atticus (schema N); this build
 understands schema M."*
 
 That is deliberate. Writing to a database created by a newer build would destroy whatever that
@@ -114,7 +114,7 @@ Specified in [`product-spec.md`](product-spec.md) §7 and
 
 Until the in-app restore lands in milestone 9:
 
-1. Quit Takenkanban.
+1. Quit Atticus.
 2. Move the current `takenkanban.sqlite3`, `-wal`, and `-shm` files somewhere safe.
 3. Copy your chosen snapshot from `backups/` to `takenkanban.sqlite3`.
 4. Start the application. Any pending migrations run on open, taking their own backup first.

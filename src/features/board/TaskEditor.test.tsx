@@ -6,6 +6,7 @@ import type { TaskDetail } from "@/lib/bindings/TaskDetail";
 import { ipc } from "@/lib/ipc";
 import { renderWithProviders } from "@/test/render";
 
+import { todayIso } from "./dates";
 import { TaskEditor } from "./TaskEditor";
 
 vi.mock("@/lib/ipc", () => ({
@@ -153,6 +154,24 @@ describe("TaskEditor", () => {
     await waitFor(() => {
       expect(taskUpdate).toHaveBeenCalledWith("t1", { clearDueDate: true });
     });
+  });
+
+  it("says a due date is unset, because the empty control does not", async () => {
+    // WebKit draws today's date greyed inside an empty `input[type=date]`
+    // instead of a placeholder, so "no due date" and "due today" look the same.
+    // M6's visual review recorded it; the words under the field are the fix.
+    render();
+
+    expect(await screen.findByText("No due date")).toBeInTheDocument();
+  });
+
+  it("replaces those words with the due state once a date is set", async () => {
+    taskDetail.mockResolvedValue(detail({ task: { ...detail().task, dueDate: todayIso() } }));
+
+    render();
+
+    expect(await screen.findByText("Due today")).toBeInTheDocument();
+    expect(screen.queryByText("No due date")).not.toBeInTheDocument();
   });
 
   it("refuses an estimate it cannot parse, and says what would work", async () => {

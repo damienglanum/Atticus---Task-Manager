@@ -46,7 +46,7 @@ export function Markdown({ children }: { children: string }) {
 
           img({ alt, src }) {
             return (
-              <span className="border-border-subtle text-fg-tertiary my-1 block rounded border border-dashed px-2 py-1 text-2xs">
+              <span className="border-border-subtle text-fg-secondary my-1 block rounded border border-dashed px-2 py-1 text-2xs">
                 Image not shown: {alt === undefined || alt === "" ? "no description" : alt}
                 {typeof src === "string" ? ` — ${src}` : null}
               </span>

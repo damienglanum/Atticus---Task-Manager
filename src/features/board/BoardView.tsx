@@ -404,7 +404,7 @@ export function BoardView({
                 setEditing(null);
                 setColumnDialogOpen(true);
               }}
-              className="border-border-subtle text-fg-tertiary hover:border-border-default hover:text-fg-secondary flex h-fit w-56 shrink-0 cursor-default items-center gap-1.5 rounded-lg border border-dashed px-3 py-2.5 text-left text-xs"
+              className="border-border-default text-fg-secondary hover:border-border-strong hover:text-fg-primary flex h-fit w-56 shrink-0 cursor-default items-center gap-1.5 rounded-lg border border-dashed px-3 py-2.5 text-left text-xs"
             >
               <Plus size={14} aria-hidden />
               Add a column
@@ -417,7 +417,7 @@ export function BoardView({
                 <p className="text-fg-primary line-clamp-3 text-xs leading-snug break-words">
                   {dragging.title}
                 </p>
-                <p className="text-fg-tertiary mt-1.5 font-mono text-2xs" data-numeric>
+                <p className="text-fg-secondary mt-1.5 font-mono text-2xs" data-numeric>
                   {projectPrefix}-{dragging.number}
                 </p>
               </div>

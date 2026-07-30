@@ -1,4 +1,4 @@
-# Takenkanban
+# Atticus - Task Manager
 
 A local-first Kanban task manager for running several personal software projects at once.
 
@@ -123,11 +123,17 @@ with no dev server and no network connection.
 The exact path is shown inside the application, so you never have to guess. It is a plain SQLite
 file — `sqlite3` and any SQLite browser can open it.
 
-Setting `TAKENKANBAN_DATA_DIR` moves it. That is how a second profile, a portable install on an
+Setting `TAKENKANBAN_DATA_DIR` moves it.
+
+> The data directory, the database filename and this variable all still say `takenkanban`,
+> which was the application's name before it was Atticus. They are deliberately unchanged:
+> the bundle identifier is what macOS derives the data directory from, so renaming it would
+> leave an existing database where the new build does not look. Renaming them is a migration,
+> not a rename, and it has not been done. That is how a second profile, a portable install on an
 external disk, or an automated test run gets its own data without touching yours:
 
 ```bash
-TAKENKANBAN_DATA_DIR=~/Documents/kanban-work open -a Takenkanban
+TAKENKANBAN_DATA_DIR=~/Documents/kanban-work open -a "Atticus - Task Manager"
 ```
 
 ## Backups
@@ -156,9 +162,9 @@ database first, so a restore is itself reversible.
 
 Written honestly, and kept current as the milestones land.
 
-- **Milestones 1–7 are complete.** Projects, boards, columns with work-in-progress limits, the full
-  task editor, search, filters and undo. Nothing in the interface is a placeholder or a dead
-  control.
+- **Milestones 1–8 are complete.** Projects, boards, columns with work-in-progress limits, the full
+  task editor, search, filters, undo, and the themed and accessible interface. Nothing in the
+  interface is a placeholder or a dead control.
 - **There is no export or import yet, and backups are manual.** Your data is a plain SQLite file you
   can copy; "Back up now" in Settings makes a snapshot. Automatic retention and JSON export/import
   are milestone 9.
@@ -169,6 +175,11 @@ Written honestly, and kept current as the milestones land.
   menu routes are tested end to end; the mouse gesture is not, because the test driver cannot
   synthesise a drag dnd-kit recognises. See [`docs/testing.md`](docs/testing.md) — it is a real gap,
   not a formality.
+- **Tab traversal is not walked by an automated test either, for the same reason.** The driver's
+  synthetic keys reach the page but WKWebView performs no default action for them, so focus never
+  moves. Keyboard *reachability* is asserted structurally against the real document instead — no
+  positive `tabindex`, nothing stranded, one entry point per composite widget — which is what makes
+  document order the tab order. See [`docs/testing.md`](docs/testing.md).
 - **Backup retention is not yet enforced.** Automatic pruning to the 10 most recent lands in
   milestone 9; until then nothing is deleted at all, which errs in the safe direction.
 - **Windows and Linux are unverified.** Nothing platform-specific has been written, but nothing has

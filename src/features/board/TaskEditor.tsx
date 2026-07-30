@@ -121,7 +121,7 @@ export function TaskEditor({ taskId, boardId, projectPrefix, onOpenChange }: Tas
   if (detail.isPending) {
     return (
       <Dialog open onOpenChange={close} title="Task">
-        <p role="status" className="text-fg-tertiary text-xs">
+        <p role="status" className="text-fg-secondary text-xs">
           Loading…
         </p>
       </Dialog>
@@ -283,7 +283,7 @@ function TitleField({ value, onSave }: { value: string; onSave: (patch: TaskPatc
           change(event.target.value);
         }}
         onBlur={flush}
-        className="text-fg-primary border-border-subtle focus-visible:border-accent-border w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-sm font-semibold outline-none"
+        className="text-fg-primary border-border-strong focus-visible:border-accent-border w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-sm font-semibold"
       />
     </div>
   );
@@ -334,10 +334,10 @@ function DescriptionField({
             change(event.target.value);
           }}
           onBlur={flush}
-          className="text-fg-primary border-border-subtle focus-visible:border-accent-border placeholder:text-fg-tertiary w-full resize-y rounded-md border bg-transparent px-2 py-1.5 font-mono text-xs outline-none"
+          className="text-fg-primary border-border-strong focus-visible:border-accent-border placeholder:text-fg-secondary w-full resize-y rounded-md border bg-transparent px-2 py-1.5 font-mono text-xs"
         />
       ) : draft === "" ? (
-        <p className="text-fg-tertiary text-xs">No description.</p>
+        <p className="text-fg-secondary text-xs">No description.</p>
       ) : (
         <Markdown>{draft}</Markdown>
       )}
@@ -350,7 +350,7 @@ function ReferenceRow({ reference }: { reference: string }) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-fg-tertiary font-mono text-xs" data-numeric>
+      <span className="text-fg-secondary font-mono text-xs" data-numeric>
         {reference}
       </span>
       <IconButton
@@ -372,7 +372,7 @@ function ReferenceRow({ reference }: { reference: string }) {
         {copied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
       </IconButton>
       {copied ? (
-        <span role="status" className="text-fg-tertiary text-2xs">
+        <span role="status" className="text-fg-secondary text-2xs">
           Copied
         </span>
       ) : null}
@@ -445,22 +445,30 @@ function DueDateField({
           const next = event.target.value;
           onSave(next === "" ? { clearDueDate: true } : { dueDate: next });
         }}
-        className="border-border-default bg-surface-raised text-fg-primary w-full rounded-md border px-2 py-1 text-xs outline-none"
+        className="border-border-strong bg-surface-raised text-fg-primary w-full rounded-md border px-2 py-1 text-xs"
       />
-      {description === "" ? null : (
-        <p
-          className={cn(
-            "mt-1 text-2xs",
-            state === "overdue"
-              ? "text-danger-fg"
-              : state === "today" || state === "soon"
-                ? "text-warning-fg"
-                : "text-fg-tertiary",
-          )}
-        >
-          {description}
-        </p>
-      )}
+      {/* Always says which state the field is in, including "none".
+
+          WebKit draws today's date greyed inside an *empty* `input[type=date]`
+          rather than a `dd-mm-yyyy` placeholder, so an unset due date looks
+          exactly like one set to today — the one pair of states a due-date
+          control must never confuse. Noted in M6's visual review and fixed here.
+
+          The words are the fix. Replacing the native control would cost a
+          keyboard-accessible, locale-aware date picker to solve a labelling
+          problem, and product-spec §10 wants every state carrying words anyway. */}
+      <p
+        className={cn(
+          "mt-1 text-2xs",
+          state === "overdue"
+            ? "text-danger-fg"
+            : state === "today" || state === "soon"
+              ? "text-warning-fg"
+              : "text-fg-secondary",
+        )}
+      >
+        {description === "" ? "No due date" : description}
+      </p>
     </div>
   );
 }
@@ -504,7 +512,7 @@ function EstimateField({
           setDraft(event.target.value);
         }}
         onBlur={commit}
-        className="border-border-default bg-surface-raised text-fg-primary placeholder:text-fg-tertiary w-full rounded-md border px-2 py-1 text-xs outline-none"
+        className="border-border-strong bg-surface-raised text-fg-primary placeholder:text-fg-secondary w-full rounded-md border px-2 py-1 text-xs"
       />
       {error === null ? null : (
         <p id="task-estimate-error" role="alert" className="text-danger-fg mt-1 text-2xs">

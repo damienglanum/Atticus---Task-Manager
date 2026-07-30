@@ -120,7 +120,7 @@ export function TaskCard({
             ))}
             {hiddenLabelCount === 0 ? null : (
               <span
-                className="text-fg-tertiary text-2xs"
+                className="text-fg-secondary text-2xs"
                 title={hiddenLabelNames}
                 aria-label={`and ${String(hiddenLabelCount)} more: ${hiddenLabelNames}`}
               >
@@ -139,7 +139,7 @@ export function TaskCard({
           {task.title}
         </p>
 
-        <div className="text-fg-tertiary mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs">
+        <div className="text-fg-secondary mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-2xs">
           <span className="font-mono" data-numeric>
             {reference}
           </span>
@@ -193,7 +193,7 @@ export function TaskCard({
           {...attributes}
           {...listeners}
           label={`Drag ${task.title}`}
-          className="text-fg-tertiary cursor-grab opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+          className="text-fg-secondary cursor-grab opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
         >
           <GripVertical size={13} aria-hidden />
         </IconButton>
@@ -206,7 +206,7 @@ export function TaskCard({
               // not exist for a touch user, and a mouse user has to discover it by
               // accident; keeping it present at low contrast costs little on a
               // dense board and keeps the affordance honest.
-              className="text-fg-tertiary opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+              className="text-fg-secondary opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
             >
               <MoreHorizontal size={14} aria-hidden />
             </IconButton>
@@ -260,7 +260,7 @@ export function TaskCard({
               {otherColumns.length > 0 ? (
                 <>
                   <MenuSeparator />
-                  <p className="text-fg-tertiary px-2 pt-1 pb-0.5 text-2xs">Move to column</p>
+                  <p className="text-fg-secondary px-2 pt-1 pb-0.5 text-2xs">Move to column</p>
                   {otherColumns.map((column) => (
                     <MenuItem
                       key={column.id}

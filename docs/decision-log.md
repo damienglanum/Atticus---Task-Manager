@@ -5,6 +5,124 @@ otherwise be invisible archaeology. Newest first.
 
 ---
 
+## M8 — Theme, accessibility, responsive, visual polish
+
+**2026-07-30 · The board tablist had three tab stops, and the fix moved a feature.**
+`role="tablist"` wrapped the tabs, a per-board actions menu revealed on hover, and "New board". A
+tablist owns tabs and nothing else, so `Tab` landed inside it repeatedly instead of moving past it.
+Found by the keyboard-order assertion below, on its first run — which is the argument for writing
+that assertion at all.
+
+"New board" simply moved out. The per-board menu was the real decision: keeping it inside the
+tablist meant giving it `tabindex="-1"` and hiding the only pointer-free route to renaming a board
+behind `Shift+F10`, which is standard but undiscoverable. It is now **one** menu, after the tablist,
+acting on the board that is open. Renaming the board you are looking at is the whole of the use
+case, and the control is now permanently visible and an ordinary tab stop rather than something that
+appears when the mouse passes over it. The cost is that acting on a board you are not looking at
+takes one extra click to select it first.
+
+**2026-07-30 · Why the keyboard pass cannot be driven, measured rather than inferred.**
+The earlier note said key events arrive without their default actions and that the behaviour was
+"not stable enough between runs to assert either way". The second half was wrong and the first half
+is now proven: a `keydown` listener on a focused button sees `Enter` arrive, so events do reach the
+DOM, and focus does not move under `browser.keys`, `performActions` or `elementSendKeys` alike.
+WKWebView does not perform default actions for synthetic keys; focus navigation is `Tab`'s default
+action. One cause, three mechanisms, consistent.
+
+What replaced the walk asserts the same property from the other end: no positive `tabindex`, nothing
+interactive stranded at `-1` outside a composite, and exactly one entry point per composite. With no
+positive `tabindex`, tab order *is* document order, so there is nothing left for a walk to discover.
+
+**2026-07-30 · The empty due-date field says "No due date" rather than being replaced.**
+WebKit draws today's date greyed inside an empty `input[type=date]` instead of a placeholder, so an
+unset due date looked exactly like one set to today — the one pair of states this control must not
+confuse. Noted in M6's visual review and deferred to here. The fix is words in the slot that already
+existed under the field, which rendered nothing for the "none" state. Replacing the native control
+would have cost a keyboard-accessible, locale-aware date picker to solve a labelling problem, and
+product-spec §10 wants every state carrying words regardless.
+
+**2026-07-30 · The greyscale pass is two tests, because a screenshot cannot fail.**
+`design-decisions.md` §3 called greyscale "the test we actually run in milestone 8". A desaturated
+screenshot shows the encodings surviving but goes green forever once someone deletes a glyph, so the
+properties live in `src/features/board/greyscale.test.ts` and the picture is the evidence they are
+rendered together. The load-bearing assertion is that **two priority levels share a tone** — if
+every level had its own colour, the glyph tests would pass while proving nothing.
+
+**2026-07-30 · The responsive suite had never tested a single one of its stated widths.**
+`setWindowRect` on this driver is in **physical** pixels; layout is in CSS pixels; the display is
+2×. So every width the visual review claimed to inspect was half of it. The "900 px narrow window"
+laid out at 450 px, the "1280 px laptop" at 640, the "1680 px wide" at 840, and the 1920 px shot
+added earlier in this milestone at 960. Measured across six widths from 900 to 3840 and linear
+throughout, so the conversion is exact rather than approximate.
+
+This is what the failing overflow assertion was really reporting. At 450 px the filter bar's facet
+buttons genuinely do extend past the window — but 450 px is half the 900 px minimum product-spec §6
+supports, so the interface was being failed for not doing something it never promised. The
+hypothesis recorded here first — that the board tab's actions button, raised to 24 px for SC 2.5.8,
+had pushed the document — was wrong, and it was wrong because it was reasoned from a diff instead of
+measured. The diagnostic that settled it took one run and names the offending boxes.
+
+`setViewportWidth()` now converts through `devicePixelRatio` and then **waits for the viewport to
+actually read that width**, so a spec that says 900 gets 900 or fails saying what it got. All three
+widths are reachable: the window may exceed the display, and 3840 physical on a 1920 physical screen
+yields a true 1920 px viewport.
+
+The assertion it replaced was a bare `expect(documentOverflows).toBe(false)`. It cost most of a
+session, because "the document is wider than the window" does not name a single box. The
+replacement lists the elements that overhang, skipping anything inside a horizontal scroller —
+board content is *supposed* to extend past the viewport.
+
+**2026-07-30 · The foreground ladder has two steps, not three.**
+`--color-fg-tertiary` was Radix's step 10 and measured 3.33:1 at worst against our own surfaces —
+below 4.5:1, and it was carrying the card metadata row, every empty state, every hint and every file
+path: 58 call sites of ordinary content. Radix offers exactly two guaranteed accessible text steps,
+11 and 12, so there was no third one to move to. The token is gone; what remains is
+`--color-fg-muted`, which is the same step 10 restricted to the disabled and inactive states WCAG
+2.2 SC 1.4.3 exempts, and a test that fails if anything else reaches for it. This is also what
+`design-decisions.md` §3 asked for in the first place — the title at full contrast and everything
+else one step down is two steps.
+
+**2026-07-30 · The danger solid is a pinned hex rather than a Radix step.**
+White on a fill has the same contrast in both themes, so the step has to be chosen once for both.
+Red 9 — Radix's brand step, identical in light and dark for that same reason — measures 3.91:1
+against white. The value is pinned to light-theme red 11, 5.21:1, matching white on the accent
+solid exactly.
+
+**2026-07-30 · The warning foreground differs by theme; the hue does not.**
+Radix tunes step 11 with APCA, and the divergence from WCAG 2's ratio is widest in the bright
+yellows: light amber 11 measured 4.05:1 on the sunken surface and 4.25:1 on its own tint. Light uses
+amber 12, dark keeps amber 11 — dark amber 12 is a pale cream that stops reading as amber at all.
+The cost is a browner warning in the light theme; the meaning was never carried by the colour alone,
+so it survives.
+
+**2026-07-30 · `outline-none` was silently removing the focus ring from every text field.**
+Tailwind's utilities layer beats our `:focus-visible` rule in `@layer base` at equal specificity, so
+`outline-none` on an input won. Focusing the estimate field, the label name, a subtask or the quick
+composer showed nothing at all. Removed where nothing replaced it; where the ring belongs on the
+wrapping box instead — the board filter and the command palette — it moved to `focus-within` on the
+wrapper. Asserted end to end against the computed style, because a class name is exactly what was
+lying.
+
+**2026-07-30 · A menu row's highlight carries the ring too.**
+`data-highlighted:bg-surface-sunken` against the menu surface measures 1.1:1 in the light theme,
+which is a focus state one can fail to see. The row now draws the same ring as everything else,
+inset. It follows the pointer as well as the keyboard because `data-highlighted` is Radix's single
+notion of which row the menu is on, and splitting it would mean two ideas of what is focused.
+
+**2026-07-30 · Control boundaries moved to step 10; container hairlines did not.**
+SC 1.4.11 asks 3:1 of what identifies a control. An empty text field is identified by its border, so
+inputs, secondary buttons and the checkbox now use `--color-border-strong` at rest — it was on
+*hover*, which is no use to someone who has not hovered. Dialogs, menus and cards keep the lighter
+hairline: their contents identify them, and raising every line in the interface to 3:1 would replace
+the Ledger direction with a wireframe.
+
+**2026-07-30 · V-1 is fixed by a command, and the frontend decides the theme.**
+`window_set_theme` takes a `ResolvedTheme` — a type that cannot hold "system". The frontend has
+already resolved the preference in order to set the document class, and resolving it a second time
+in Rust is how the titlebar and the board come to disagree.
+
+---
+
 ## M7 — Search, filters, palette, shortcuts
 
 **2026-07-30 · `cmdk` was planned and not adopted.**
@@ -200,7 +318,7 @@ that same wrong hypothesis and has been changed back.
 ## M4b — End-to-end harness
 
 **2026-07-30 · The e2e binary builds into `target/e2e`, not `target/debug`.**
-The first version shared `target/debug/takenkanban` with `tauri dev` and `cargo build`. A
+The first version shared `target/debug/atticus` with `tauri dev` and `cargo build`. A
 `tauri dev` running in another terminal rebuilt that path without the feature, between the moment
 the WebDriver binary was built and the moment it was launched — so the probe found no listening port
 and the plugin looked broken. It was not; the binary had been replaced. A separate target directory

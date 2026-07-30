@@ -74,7 +74,7 @@ export function Dialog({
 
           <DialogPrimitive.Close
             aria-label="Close"
-            className="text-fg-tertiary hover:text-fg-primary hover:bg-surface-sunken absolute top-4 right-4 inline-flex size-6 cursor-default items-center justify-center rounded-md"
+            className="text-fg-secondary hover:text-fg-primary hover:bg-surface-sunken absolute top-4 right-4 inline-flex size-6 cursor-default items-center justify-center rounded-md"
           >
             <X size={14} aria-hidden />
           </DialogPrimitive.Close>

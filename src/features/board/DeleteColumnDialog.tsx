@@ -111,7 +111,7 @@ export function DeleteColumnDialog({
                   setTargetId(event.target.value);
                 }}
                 aria-label="Column to move the tasks to"
-                className="border-border-default bg-surface-raised text-fg-primary ml-6 w-[calc(100%-1.5rem)] rounded-md border px-2 py-1 text-xs disabled:opacity-50"
+                className="border-border-strong bg-surface-raised text-fg-primary ml-6 w-[calc(100%-1.5rem)] rounded-md border px-2 py-1 text-xs disabled:opacity-50"
               >
                 {otherColumns.map((other) => (
                   <option key={other.id} value={other.id}>
@@ -134,14 +134,14 @@ export function DeleteColumnDialog({
               />
               <span className="text-fg-primary flex-1">
                 Delete the {noun} too
-                <span className="text-fg-tertiary block">
+                <span className="text-fg-secondary block">
                   Including anything archived in this column.
                 </span>
               </span>
             </label>
           </fieldset>
 
-          <p className="text-fg-tertiary">You can undo this from the notification afterwards.</p>
+          <p className="text-fg-secondary">You can undo this from the notification afterwards.</p>
         </div>
       ) : (
         <p className="text-fg-secondary">

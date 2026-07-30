@@ -187,6 +187,64 @@ Acceptance criteria: US-23, US-24, product-spec §10 in full. Contrast measured,
 both themes. Focus visible and distinct from selection everywhere. Full keyboard pass with no
 mouse. Window widths 900 / 1280 / 1920 inspected. Reduced-motion honoured.
 
+Acceptance criteria, all met on 2026-07-30:
+
+- ✅ **Contrast measured in both themes.** `src/styles/contrast.test.ts` resolves the tokens through
+  the same `var()` chain the browser follows and computes every pair the interface can produce. It
+  found four real defects and all four are fixed — see the decision log. The worst measured ratio is
+  now 3.33:1 for a control boundary against a 3:1 threshold and 5.21:1 for text against 4.5:1. The
+  numbers are printed, not only asserted.
+- ✅ **A focus ring that is actually drawn.** `outline-none` was suppressing it on every text field
+  in the application; the menu row's highlight was 1.1:1. Both fixed, and the regression is guarded
+  at the source, because neither jsdom nor the end-to-end driver can hold it.
+- ✅ **US-24 reduced motion**, asserted on both branches of the media query.
+- ✅ **US-23 theme switching without a reload**, asserted end to end by a value parked on `window`.
+- ✅ **V-1**, the dark titlebar under the light theme, open since M3. `window_set_theme` takes a
+  `ResolvedTheme` that cannot carry "system".
+- ✅ **Target sizes.** Two controls were under 24 px — the board tab's actions button at 20×20 and
+  the board filter at 18 px tall. Both raised.
+- ✅ **900 / 1280 / 1920 genuinely inspected** — for the first time. The suite had been resizing in
+  physical pixels on a 2× display, so every width it named was half of it and the "900 px" narrow
+  window was really 450. `setViewportWidth()` converts and then proves the viewport landed. See the
+  decision log; this is also what the failing overflow assertion below turned out to be.
+- ✅ **The keyboard pass, asserted structurally after the cause of the gap was measured.** A
+  `keydown` listener on a focused button *does* see `Enter` arrive, so events reach the DOM —
+  WKWebView simply performs no default action for a synthetic key, and focus navigation is `Tab`'s
+  default action. Confirmed identically across `browser.keys`, `performActions` and
+  `elementSendKeys`. So the walk is replaced by an assertion that no positive `tabindex` exists,
+  nothing interactive is stranded at `-1` outside a composite, and each composite offers exactly one
+  entry point — with no positive `tabindex`, tab order *is* document order. It found the tablist
+  defect below on its first run.
+- ✅ **The greyscale pass.** `src/features/board/greyscale.test.ts` asserts priority carries a
+  distinct glyph *and* distinct words per level, that due-date states are distinct sentences, and —
+  the assertion that gives the others teeth — that two priority levels **share a tone**, so colour
+  genuinely cannot read the scale. `visual.e2e.ts` photographs a real board under
+  `filter: grayscale(1)` as the evidence they render together.
+- ✅ **The empty date field**, carried over from M6. WebKit greys today's date inside an empty
+  `input[type=date]`, so "no due date" looked like "due today"; the field now says which it is.
+- ✅ **The board tablist has one tab stop.** It had three — the tab, a hover-revealed per-board
+  actions menu, and "New board". Restructured so the tablist holds only tabs; board actions are now
+  one permanently visible control acting on the open board.
+
+Gate green: 265 component tests (up from 228), 207 Rust tests (up from 204), `npm run verify` clean.
+End-to-end: **77 specs, all passing**, at the real widths.
+
+**The failing narrow-window assertion is resolved, and it was not a layout defect.** The suite was
+resizing in physical pixels against a CSS-pixel layout on a 2× display, so *stays usable in a narrow
+window* had been testing 450 px, not 900. At 450 px the filter bar's facet buttons really do
+overhang — and 450 px is half the minimum product-spec §6 supports. At a true 900 px nothing
+overflows and the board scrolls inside itself as designed.
+
+The hypothesis recorded here previously — the board tab's actions button, raised to 24 px for
+SC 2.5.8, pushing the document — was **wrong**. It was reasoned from the diff rather than measured.
+Replacing the boolean assertion with one that names the overhanging boxes identified the real
+elements on the first run, and the geometry it printed alongside them is what exposed the pixel-ratio
+problem underneath. Recorded because the lesson is the cheaper one: a layout assertion should say
+*which box*.
+
+`detail.e2e.ts` › *returns focus to the card it opened from*, noted here as an unexplained
+intermittent, passed again on the full run. Still unexplained, still watched.
+
 ## M9 — Import/export, backup/restore, recovery
 
 **Delivers:** the data-safety features.

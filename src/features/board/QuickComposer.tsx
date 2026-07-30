@@ -77,9 +77,9 @@ export function QuickComposer({ columnName, onCreate, onClose }: QuickComposerPr
           if (title.trim().length > 0) submit();
           else onClose();
         }}
-        className="border-accent-border bg-surface-raised text-fg-primary placeholder:text-fg-tertiary w-full resize-none rounded-md border px-2.5 py-2 text-xs leading-snug outline-none"
+        className="border-border-strong bg-surface-raised text-fg-primary placeholder:text-fg-secondary w-full resize-none rounded-md border px-2.5 py-2 text-xs leading-snug"
       />
-      <p className="text-fg-tertiary mt-1 text-2xs">Enter to add · Escape to close</p>
+      <p className="text-fg-secondary mt-1 text-2xs">Enter to add · Escape to close</p>
     </form>
   );
 }

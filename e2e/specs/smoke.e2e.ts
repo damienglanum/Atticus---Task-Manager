@@ -13,6 +13,7 @@ import {
   dialogNamed,
   openSettings,
   projectInSidebar,
+  setViewportWidth,
 } from "../support/app.js";
 
 const PROJECT_NAME = "Harness Check";
@@ -36,10 +37,10 @@ describe("smoke", () => {
   });
 
   it("remains usable in a narrow window", async () => {
-    await browser.setWindowRect(null, null, 900, 700);
+    await setViewportWidth(900, 700);
     await expect(projectInSidebar(PROJECT_NAME)).toBeDisplayed();
 
-    await browser.setWindowRect(null, null, 1280, 820);
+    await setViewportWidth(1280, 820);
     await expect(projectInSidebar(PROJECT_NAME)).toBeDisplayed();
   });
 

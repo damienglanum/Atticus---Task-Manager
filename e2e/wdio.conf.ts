@@ -19,7 +19,7 @@ import { pinWindow } from "./support/app.js";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 /** Matches the `[profile.e2e]` output path in `src-tauri/Cargo.toml`. */
-export const APP_BINARY = join(root, "src-tauri", "target", "e2e", "e2e", "takenkanban");
+export const APP_BINARY = join(root, "src-tauri", "target", "e2e", "e2e", "atticus");
 
 /** Screenshots of failing tests, and the visual review. Not committed. */
 export const ARTIFACT_DIR = join(root, "e2e", "artifacts");

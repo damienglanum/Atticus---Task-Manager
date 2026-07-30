@@ -58,7 +58,7 @@ function Row({
 }) {
   return (
     <div className="flex gap-4 py-2">
-      <dt className="text-fg-tertiary w-36 shrink-0">{label}</dt>
+      <dt className="text-fg-secondary w-36 shrink-0">{label}</dt>
       <dd
         className={`text-fg-primary break-all ${mono ? "font-mono text-xs" : ""}`}
         data-selectable

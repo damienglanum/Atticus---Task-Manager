@@ -18,7 +18,7 @@ export interface PriorityLevel {
   tone: string;
 }
 
-const NONE: PriorityLevel = { value: 0, label: "None", icon: Minus, tone: "text-fg-tertiary" };
+const NONE: PriorityLevel = { value: 0, label: "None", icon: Minus, tone: "text-fg-secondary" };
 
 export const PRIORITIES: readonly PriorityLevel[] = [
   NONE,
