@@ -11,7 +11,7 @@ use crate::error::{AppError, AppResult};
 /// The five columns a new board starts with. Chosen to be immediately usable and
 /// immediately editable — the point is that nobody has to design a workflow
 /// before writing their first task.
-pub const DEFAULT_COLUMNS: [&str; 5] = ["Backlog", "Todo", "In Progress", "Blocked", "Done"];
+pub const DEFAULT_COLUMNS: [&str; 5] = ["Backlog", "Todo", "In Progress", "Review", "Done"];
 pub const DEFAULT_BOARD_NAME: &str = "Board";
 
 #[derive(Debug, Clone, Serialize, TS)]

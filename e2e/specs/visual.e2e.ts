@@ -32,7 +32,7 @@ const WORK: Record<string, string[]> = {
   ],
   Todo: ["Write the migration for the v2 schema", "Replace the placeholder empty state"],
   "In Progress": ["Accessible keyboard drag-and-drop", "Command palette shell"],
-  Blocked: [
+  Review: [
     // Deliberately long: the card has to stay readable and must not push the
     // column wider than its neighbours.
     "Waiting on the next Tauri release for the file-dialog fix, which also unblocks the attachment work and the reveal-in-Finder command",
@@ -173,7 +173,7 @@ describe("visual review", () => {
   });
 
   it("photographs the delete-column decision", async () => {
-    await openMenu("Actions for Blocked");
+    await openMenu("Actions for Review");
     await chooseMenuItem("Delete column");
 
     const dialog = $('[role="alertdialog"]');

@@ -18,7 +18,6 @@ import { fileURLToPath } from "node:url";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const release = join(root, "src-tauri", "target", "release");
 const binary = join(release, "atticus");
-const app = join(release, "bundle", "macos", "Atticus - Task Manager.app");
 
 const problems = [];
 
@@ -81,28 +80,26 @@ if (found.length > 0) {
   );
 }
 
-// The bundle is the thing a person actually launches, so its absence is a
-// failure of this check rather than something to mention in passing.
-if (!existsSync(app)) {
-  problems.push(`No .app bundle at ${app}.`);
-} else {
-  // Read the directory rather than guessing the name: the bundle is titled
-  // "Atticus - Task Manager" but the executable inside it is the crate's own
-  // `atticus`, which is exactly the kind of assumption worth not making twice.
-  const macos = join(app, "Contents", "MacOS");
-  const executables = existsSync(macos) ? readdirSync(macos) : [];
-  if (executables.length === 0) {
-    problems.push(`The .app bundle has no executable in ${macos}.`);
-  }
-}
-
-// Matched by extension rather than by name: the filename carries the version
-// and the architecture, and hardcoding either makes this fail on the next
-// release for no reason.
+// Only the .dmg is bundled. Tauri still builds the .app because a dmg is made
+// from one, then removes it — `targets: ["dmg"]` in `tauri.conf.json`, so that
+// installing leaves one copy of the application on the machine rather than a
+// loose .app beside the disk image it came out of.
+//
+// Matched by extension rather than by name: the filename carries the version and
+// the architecture, and hardcoding either makes this fail on the next release
+// for no reason.
 const dmgDir = join(release, "bundle", "dmg");
 const dmgs = existsSync(dmgDir) ? readdirSync(dmgDir).filter((name) => name.endsWith(".dmg")) : [];
 if (dmgs.length === 0) {
   problems.push(`No .dmg in ${dmgDir}.`);
+}
+
+const looseApps = join(release, "bundle", "macos");
+if (existsSync(looseApps) && readdirSync(looseApps).some((name) => name.endsWith(".app"))) {
+  problems.push(
+    `A .app was left in ${looseApps}. Only the .dmg is meant to ship, so a stale ` +
+      `bundle here means an old build is still on disk — delete it before shipping.`,
+  );
 }
 
 if (problems.length > 0) {
@@ -112,4 +109,4 @@ if (problems.length > 0) {
 
 const size = (statSync(binary).size / 1_000_000).toFixed(1);
 console.log(`Release binary is clean: no WebDriver server, ${size} MB.`);
-console.log(`Bundles present: .app and ${dmgs.join(", ")}.`);
+console.log(`Bundle present: ${dmgs.join(", ")} (no loose .app).`);

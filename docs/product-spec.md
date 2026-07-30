@@ -46,7 +46,7 @@ Explicit and permanent for v1:
 
 **W1 — First run.** App opens with no projects. An empty state explains what a project is and
 offers one action: create a project. Creating one seeds a board with five columns
-(Backlog, Todo, In Progress, Blocked, Done) and opens it.
+(Backlog, Todo, In Progress, Review, Done) and opens it.
 
 **W2 — Daily open.** App restores the last opened project and board. Board renders populated.
 

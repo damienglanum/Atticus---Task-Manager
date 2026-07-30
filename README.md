@@ -109,7 +109,9 @@ change to persistence. Full detail in [`docs/testing.md`](docs/testing.md).
 npm run tauri build
 ```
 
-Produces a `.app` and a `.dmg` under `src-tauri/target/release/bundle/`. The built application runs
+Produces a `.dmg` under `src-tauri/target/release/bundle/dmg/`. The `.app` is built as an
+intermediate — a disk image is made from one — and then removed, so installing leaves a single copy
+of the application rather than a loose bundle beside the image it came out of. The built application runs
 with no dev server and no network connection.
 
 ## Where your data lives
@@ -167,7 +169,7 @@ Written honestly, and kept current as the milestones land.
   accessible interface, and JSON export/import with backup and restore. Nothing in the interface is
   a placeholder or a dead control.
 - **The packaged app has not been launched by hand from Finder.** `npm run tauri build` produces a
-  working `.app` and `.dmg`, and `npm run release:check` asserts the binary carries no WebDriver
+  working `.dmg`, and `npm run release:check` asserts the binary carries no WebDriver
   server, but nobody has yet double-clicked it with the dev server stopped and the network off and
   worked through a real session. Until someone has, "it ships" is a claim rather than a fact.
 - **Cold launch time is unmeasured.** Every other performance target in

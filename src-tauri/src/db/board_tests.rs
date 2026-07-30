@@ -109,7 +109,7 @@ fn a_new_board_starts_with_the_default_columns_in_order() {
 
     assert_eq!(
         names,
-        ["Backlog", "Todo", "In Progress", "Blocked", "Done"],
+        ["Backlog", "Todo", "In Progress", "Review", "Done"],
         "a new board should be immediately usable without designing a workflow first"
     );
 }
@@ -1679,7 +1679,7 @@ fn undoing_a_column_delete_brings_back_the_column_its_tasks_and_its_place() {
     let restored = columns::list(fixture.db.connection(), &fixture.board_id).expect("columns");
     let names: Vec<&str> = restored.iter().map(|c| c.name.as_str()).collect();
 
-    assert_eq!(names, ["Backlog", "Todo", "In Progress", "Blocked", "Done"]);
+    assert_eq!(names, ["Backlog", "Todo", "In Progress", "Review", "Done"]);
     assert_eq!(
         restored.iter().map(|c| c.position).collect::<Vec<_>>(),
         [0, 1, 2, 3, 4]
@@ -2026,7 +2026,7 @@ fn a_board_of_500_tasks_loads_inside_its_budget() {
     // Six columns, because that is the shape product-spec §9 states. The default
     // board has five, so measuring it as-is would be measuring a slightly
     // different question than the one the target asks.
-    columns::create(fixture.db.connection_mut(), &fixture.board_id, "Review").expect("column");
+    columns::create(fixture.db.connection_mut(), &fixture.board_id, "Blocked").expect("column");
     fixture.columns = columns::list(fixture.db.connection(), &fixture.board_id)
         .expect("columns")
         .into_iter()

@@ -38,7 +38,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": ["dmg"],
     "category": "Productivity",
     "copyright": "",
     "shortDescription": "Local-first Kanban for personal software projects",

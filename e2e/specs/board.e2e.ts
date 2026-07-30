@@ -29,7 +29,7 @@ describe("the board", () => {
   it("starts with the five default columns", async () => {
     await waitForAppReady();
 
-    for (const name of ["Backlog", "Todo", "In Progress", "Blocked", "Done"]) {
+    for (const name of ["Backlog", "Todo", "In Progress", "Review", "Done"]) {
       await expect(columnNamed(name)).toBeDisplayed();
     }
   });
@@ -103,16 +103,16 @@ describe("the board", () => {
   it("adds a column and sets a work-in-progress limit on it", async () => {
     await $("button=Add a column").click();
     await $('div[role="dialog"]').waitForDisplayed();
-    await $("#column-form input").setValue("Review");
+    await $("#column-form input").setValue("Blocked");
     await $("button=Add column").click();
 
-    await expect(columnNamed("Review")).toBeDisplayed();
+    await expect(columnNamed("Blocked")).toBeDisplayed();
   });
 
   it("warns when a column goes over its limit, in more than colour", async () => {
     // A limit of one, then two tasks: the header must show the count, a warning
     // glyph, and announce the breach.
-    await openMenu("Actions for Review");
+    await openMenu("Actions for Blocked");
     await chooseMenuItem("Rename and set a limit");
     await $('div[role="dialog"]').waitForDisplayed();
 
@@ -123,18 +123,18 @@ describe("the board", () => {
     await $("button=Save changes").click();
     await $('div[role="dialog"]').waitForDisplayed({ reverse: true });
 
-    await addTaskTo("Review", "First review");
-    await expect(columnNamed("Review")).toHaveText(expect.stringContaining("1/1"));
+    await addTaskTo("Blocked", "First review");
+    await expect(columnNamed("Blocked")).toHaveText(expect.stringContaining("1/1"));
 
-    await addTaskTo("Review", "Second review");
-    await expect(columnNamed("Review")).toHaveText(expect.stringContaining("2/1"));
-    await expect(columnNamed("Review").$("[role='status']")).toHaveText(
-      "Review is over its limit, 2 of 1",
+    await addTaskTo("Blocked", "Second review");
+    await expect(columnNamed("Blocked")).toHaveText(expect.stringContaining("2/1"));
+    await expect(columnNamed("Blocked").$("[role='status']")).toHaveText(
+      "Blocked is over its limit, 2 of 1",
     );
   });
 
   it("moves a deleted column's tasks rather than losing them", async () => {
-    await openMenu("Actions for Review");
+    await openMenu("Actions for Blocked");
     await chooseMenuItem("Delete column");
 
     const dialog = $('[role="alertdialog"]');
@@ -153,7 +153,7 @@ describe("the board", () => {
     await $("button=Delete column").click();
     await dialog.waitForDisplayed({ reverse: true });
 
-    await expect(columnNamed("Review")).not.toBeDisplayed();
+    await expect(columnNamed("Blocked")).not.toBeDisplayed();
     await expect(columnNamed("Done")).toHaveText(expect.stringContaining("First review"));
     await expect(columnNamed("Done")).toHaveText(expect.stringContaining("Second review"));
   });
@@ -161,8 +161,8 @@ describe("the board", () => {
   it("undoes a column deletion, bringing the column and its tasks back", async () => {
     await $("button=Undo").click();
 
-    await expect(columnNamed("Review")).toBeDisplayed();
-    await expect(columnNamed("Review")).toHaveText(expect.stringContaining("First review"));
+    await expect(columnNamed("Blocked")).toBeDisplayed();
+    await expect(columnNamed("Blocked")).toHaveText(expect.stringContaining("First review"));
     await expect(columnNamed("Done")).not.toHaveText(expect.stringContaining("First review"));
   });
 

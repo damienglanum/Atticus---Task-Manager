@@ -308,7 +308,7 @@ malformed, and that it imports back into a running application and reaches the b
 Acceptance criteria:
 - Every performance target in product-spec §9 measured and recorded with its actual number.
 - Full E2E suite green against the real app (ADR-0008), including restart-and-persist.
-- `npm run tauri build` produces `.app` and `.dmg`; the packaged app is launched from Finder with
+- `npm run tauri build` produces an installable bundle; the packaged app is launched from Finder with
   the dev server stopped and network disabled, and the core workflow completed by hand.
 - Release build asserted **not** to contain the WebDriver permission.
 - No console errors during primary workflows.
@@ -332,8 +332,10 @@ Acceptance criteria:
   The mark now exists in the application, so a release build can be timed by hand with it.
 - ✅ **Full end-to-end suite green**: 86 specs, including restart-and-persist and the export round
   trip.
-- ✅ **`npm run tauri build` produces both bundles.** `.app` and
-  `Atticus - Task Manager_0.1.0_aarch64.dmg`, from a 6.9 MB binary.
+- ✅ **`npm run tauri build` produces `Atticus - Task Manager_0.1.0_aarch64.dmg`** from a 6.9 MB
+  binary. `.dmg` only: the `.app` is an intermediate a disk image is made from, and Tauri removes it
+  afterwards, so installing leaves one copy of the application rather than two. `release:check`
+  fails if a stale `.app` is left behind.
 - ✅ **The release binary is asserted clean of the WebDriver server**, against the *artifact* rather
   than the manifest — `npm run release:check`. Four candidate markers were tried and only two
   actually appear in a WebDriver build, so the other two would have been a check of nothing;
