@@ -1,0 +1,72 @@
+[package]
+name = "takenkanban"
+version = "0.1.0"
+description = "A local-first Kanban task manager for personal software projects."
+authors = ["Damien"]
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+# The `_lib` suffix keeps the library name distinct from the binary name.
+name = "takenkanban_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+ts-rs = "12"
+# `bundled` compiles SQLite from source rather than linking the system library,
+# so the SQLite version and its compiled-in features (notably FTS5) are the same
+# on every machine and are not silently changed by an OS update.
+rusqlite = { version = "0.40", features = ["bundled"] }
+uuid = { version = "1", features = ["v7"] }
+# Embedded W3C WebDriver server. Optional and off by default — see the
+# `e2e-webdriver` feature below and ADR-0008.
+tauri-plugin-wdio-webdriver = { version = "1.2", optional = true }
+
+[features]
+# Compiles in a WebDriver server that can drive this window. Enabled only by
+# `npm run e2e`, which builds a separate binary for the purpose. Never a default:
+# `cargo build`, `tauri dev` and `tauri build` must not produce a binary that
+# listens on a port.
+#
+# It also enables `tauri/custom-protocol`, and that is not incidental. Tauri
+# decides at build time whether a binary is a "dev" one, and the rule is
+# literally `dev = !custom_protocol` (tauri 2.11.5 `build.rs`). A dev binary
+# embeds `devUrl` and renders a blank window unless the Vite server happens to
+# be up. Tying the two together means an end-to-end run always exercises the
+# same embedded frontend bundle the packaged app ships, and cannot silently
+# degrade into testing the dev server.
+e2e-webdriver = ["dep:tauri-plugin-wdio-webdriver", "tauri/custom-protocol"]
+
+[dev-dependencies]
+tempfile = "3"
+# `trace` reports each statement as it runs. Only the tests use it, and it is
+# what lets `board_load` assert its query count instead of assuming it.
+rusqlite = { version = "0.40", features = ["bundled", "trace"] }
+
+# End-to-end binaries are production builds in every way that affects behaviour
+# (see the `e2e-webdriver` feature) but none of the ways that only cost time.
+# `[profile.release]` below sets `lto` and `codegen-units = 1`, which turn a
+# rebuild into a multi-minute wait for no benefit to a test run.
+[profile.e2e]
+inherits = "release"
+opt-level = 0
+lto = false
+codegen-units = 256
+strip = false
+incremental = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

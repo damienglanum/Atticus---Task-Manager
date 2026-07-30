@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Least-privilege capability for the main window. The webview is granted no filesystem read/write permission and no shell permission at all: file references are chosen through the system dialog and opened through a Rust command. See docs/architecture.md §11 and ADR-0007.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "opener:allow-reveal-item-in-dir",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }, { "url": "mailto:*" }]
+    }
+  ]
+}

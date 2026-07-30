@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+coverage
+*.local
+
+# Rust / Tauri
+src-tauri/target
+src-tauri/gen
+
+# End-to-end artefacts
+e2e/reports
+e2e/logs
+e2e/artifacts
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.swp
+
+# Logs
+*.log
+npm-debug.log*

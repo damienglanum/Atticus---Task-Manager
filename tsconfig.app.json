@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "useDefineForClassFields": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    // No `baseUrl`: it is deprecated in TypeScript 6 and removed in 7.
+    // Relative `paths` resolve against this file's directory.
+    "paths": { "@/*": ["./src/*"] },
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true,
+
+    // `node` is here for tests that read files from disk (e.g. checking the
+    // Rust validator's limits still match the Zod schemas). An ESLint rule
+    // forbids node builtins in non-test source, so this does not become a door
+    // into the webview bundle.
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"]
+  },
+  "include": ["src", "vitest.setup.ts"]
+}

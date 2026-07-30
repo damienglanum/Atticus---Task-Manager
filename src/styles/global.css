@@ -1,0 +1,79 @@
+@import "./tokens.css";
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-surface-app);
+    color: var(--color-fg-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    -webkit-font-smoothing: antialiased;
+
+    /* A desktop application window is not a document: it should not rubber-band,
+       and text selection should behave like an app, not a web page. */
+    overscroll-behavior: none;
+    user-select: none;
+    cursor: default;
+  }
+
+  /* Text the user actually authored stays selectable. */
+  input,
+  textarea,
+  [data-selectable] {
+    user-select: text;
+    cursor: auto;
+  }
+
+  /* One focus ring, everywhere. Only ever shown for keyboard interaction, and
+     deliberately distinct from the selected state (which uses a background). */
+  :focus-visible {
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
+    outline-offset: var(--focus-ring-offset);
+    border-radius: var(--radius-sm);
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Every count in the interface is tabular so digits do not shift as values change. */
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}

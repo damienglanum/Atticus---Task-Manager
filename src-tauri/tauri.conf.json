@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Takenkanban",
+  "version": "0.1.0",
+  "identifier": "nl.synaptica.takenkanban",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Takenkanban",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "titleBarStyle": "Visible"
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "img-src": ["'self'", "asset:", "data:"],
+        "font-src": "'self'",
+        "connect-src": ["'self'", "ipc:", "http://ipc.localhost"],
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "frame-ancestors": "'none'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Productivity",
+    "copyright": "",
+    "shortDescription": "Local-first Kanban for personal software projects",
+    "longDescription": "A local-first Kanban task manager. No account, no cloud, no telemetry. Data lives in a SQLite database on your own machine.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    }
+  }
+}

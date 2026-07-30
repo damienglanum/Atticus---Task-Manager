@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
+    "target": "ES2022",
+    // DOM is needed for the bodies of `browser.execute(...)`, which run inside
+    // the application's page rather than in the runner's Node process.
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true,
+
+    // `@wdio/globals/types` supplies `browser` and `$`/`$$`; `mocha` supplies
+    // `describe`/`it`/`before`. Both are injected by the runner rather than
+    // imported, so they have to be declared here.
+    "types": ["node", "mocha", "@wdio/globals/types", "expect-webdriverio"]
+  },
+  "include": ["**/*.ts"]
+}

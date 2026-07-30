@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+/* Radix Colors — MIT. 12-step scales; light and dark are paired scales, not inversions.
+   Which step maps to which token below is asserted by contrast measurement in milestone 8. */
+@import "@radix-ui/colors/slate.css";
+@import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/indigo.css";
+@import "@radix-ui/colors/indigo-dark.css";
+@import "@radix-ui/colors/red.css";
+@import "@radix-ui/colors/red-dark.css";
+@import "@radix-ui/colors/amber.css";
+@import "@radix-ui/colors/amber-dark.css";
+@import "@radix-ui/colors/grass.css";
+@import "@radix-ui/colors/grass-dark.css";
+@import "@radix-ui/colors/blue.css";
+@import "@radix-ui/colors/blue-dark.css";
+@import "@radix-ui/colors/cyan.css";
+@import "@radix-ui/colors/cyan-dark.css";
+@import "@radix-ui/colors/teal.css";
+@import "@radix-ui/colors/teal-dark.css";
+@import "@radix-ui/colors/orange.css";
+@import "@radix-ui/colors/orange-dark.css";
+@import "@radix-ui/colors/plum.css";
+@import "@radix-ui/colors/plum-dark.css";
+
+/* Theme is an explicit class on <html>, never left to chance: the app always writes
+   either `light` or `dark`, resolving "system" itself. Radix scales key off the same
+   class names, so importing the scales above is all the wiring they need. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* ── Typography ───────────────────────────────────────────────────────────
+     system-ui resolves to SF Pro on macOS: designed for this platform, already
+     on disk, no bundle, no font licence. See docs/design-decisions.md §3. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --text-2xs: 0.6875rem; /* 11px — metadata */
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem; /* 12px — column headers, chips */
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem; /* 13px — card titles, body */
+  --text-sm--line-height: 1.35;
+  --text-base: 0.875rem; /* 14px — form controls */
+  --text-base--line-height: 1.4;
+  --text-lg: 0.9375rem; /* 15px — the largest text in the app, deliberately */
+  --text-lg--line-height: 1.35;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* ── Spacing — six values, nothing else ─────────────────────────────────── */
+  --spacing: 0.25rem; /* 4px base; Tailwind derives p-1 … p-8 from this */
+
+  /* ── Radius ─────────────────────────────────────────────────────────────── */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
+  --duration-fast: 100ms;
+  --duration-base: 160ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Surfaces ───────────────────────────────────────────────────────────── */
+  --color-surface-app: var(--slate-2);
+  --color-surface-column: var(--slate-1);
+  --color-surface-card: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: var(--slate-3);
+
+  /* ── Foreground ─────────────────────────────────────────────────────────── */
+  --color-fg-primary: var(--slate-12);
+  --color-fg-secondary: var(--slate-11);
+  --color-fg-tertiary: var(--slate-10);
+
+  /* ── Borders ────────────────────────────────────────────────────────────── */
+  --color-border-subtle: var(--slate-5);
+  --color-border-default: var(--slate-7);
+  --color-border-strong: var(--slate-8);
+
+  /* ── Accent — the only saturated colour in the chrome ───────────────────── */
+  --color-accent-solid: var(--indigo-9);
+  --color-accent-fg: var(--indigo-11);
+  --color-accent-bg: var(--indigo-3);
+  --color-accent-border: var(--indigo-7);
+
+  /* ── Status ─────────────────────────────────────────────────────────────── */
+  --color-danger-solid: var(--red-9);
+  --color-danger-fg: var(--red-11);
+  --color-danger-bg: var(--red-3);
+  --color-danger-border: var(--red-7);
+  --color-warning-fg: var(--amber-11);
+  --color-warning-bg: var(--amber-3);
+  --color-success-fg: var(--grass-11);
+  --color-success-bg: var(--grass-3);
+}
+
+/* Dark theme overrides. Radix supplies the scale values; only the surface
+   assignments differ, because a dark UI layers upward from the darkest step
+   while a light UI layers a card above a slightly tinted page. */
+.dark {
+  --color-surface-app: var(--slate-1);
+  --color-surface-column: var(--slate-2);
+  --color-surface-card: var(--slate-3);
+  --color-surface-raised: var(--slate-4);
+  --color-surface-sunken: var(--slate-1);
+}
+
+@theme {
+  /* ── Focus ring — one ring, used identically everywhere ─────────────────── */
+  --color-focus-ring: var(--indigo-9);
+}
+
+:root {
+  /* Project and label colours.
+     Stored in the database as names ("indigo"), resolved to a value here, so
+     the palette can be retuned per theme without rewriting anyone's data.
+     Step 9 is Radix's solid fill — the step designed to read as "this colour". */
+  --project-slate: var(--slate-9);
+  --project-indigo: var(--indigo-9);
+  --project-blue: var(--blue-9);
+  --project-cyan: var(--cyan-9);
+  --project-teal: var(--teal-9);
+  --project-grass: var(--grass-9);
+  --project-amber: var(--amber-9);
+  --project-orange: var(--orange-9);
+  --project-red: var(--red-9);
+  --project-plum: var(--plum-9);
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* The only shadow in the system. It exists to say "lifted", and nothing else
+     in the resting interface is allowed to use it. See docs/design-decisions.md §4. */
+  --shadow-overlay: 0 8px 24px -6px rgb(0 0 0 / 0.18), 0 2px 6px -2px rgb(0 0 0 / 0.12);
+
+  /* Z-index layers. These six numbers are the only stacking values in the app. */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-dropdown: 20;
+  --z-overlay: 30;
+  --z-dialog: 40;
+  --z-toast: 50;
+}
+
+.dark {
+  --shadow-overlay: 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+  }
+}

@@ -1,0 +1,8 @@
+dist
+coverage
+node_modules
+src-tauri/target
+src-tauri/gen
+src/lib/bindings
+package-lock.json
+*.md
