@@ -318,7 +318,7 @@ compromise the core board in v1.
    no network.
 5. Data survives quit-and-relaunch, verified end-to-end against the real packaged app.
 6. Backup, restore, export, import, and a migration from a prior-schema fixture are all tested.
-7. The interface has been visually inspected in every state listed in `docs/testing.md` §Visual.
+7. The interface has been visually inspected in every state recorded in `docs/visual-review.md`.
 8. `THIRD_PARTY_NOTICES.md` accounts for every dependency and every asset.
 9. Known limitations are written down in `README.md` honestly, including anything that did not
    get finished.

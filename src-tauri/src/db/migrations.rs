@@ -133,6 +133,122 @@ mod tests {
         },
     ];
 
+    /// A realistic *next* migration: additive, which is the only shape a
+    /// migration over live data is allowed to take without a data-moving step.
+    const UPGRADED: &[Migration] = &[
+        Migration {
+            version: 1,
+            description: "initial schema",
+            sql: include_str!("schema/m0001_initial.sql"),
+        },
+        Migration {
+            version: 2,
+            description: "a column added to a populated table",
+            sql: "ALTER TABLE tasks ADD COLUMN colour TEXT;
+                  CREATE INDEX ix_tasks_colour ON tasks (colour) WHERE colour IS NOT NULL;",
+        },
+    ];
+
+    /// Product-spec §12.6 asks for "a migration from a prior-schema fixture".
+    ///
+    /// The prior schema is the real, released version 1 — there is no second
+    /// released migration yet, so the *next* one is defined here rather than
+    /// invented in a fixture file. What is being tested is the upgrade path over
+    /// **real data written by the real code**, which is the part that can lose
+    /// somebody's work: the version advances, every row survives, and a backup
+    /// was taken before any of it happened.
+    #[test]
+    fn a_populated_database_upgrades_from_the_prior_schema_without_losing_anything() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join(crate::db::DATABASE_FILE_NAME);
+
+        let task_id;
+        {
+            // Opened at version 1 and populated through the ordinary commands, so
+            // the rows are shaped the way real rows are rather than hand-written.
+            let mut db = Database::open_with(&path, MIGRATIONS).expect("v1 opens");
+            assert_eq!(current_version(db.connection()).expect("version"), 1);
+
+            let (project, board) = crate::db::projects::create(
+                db.connection_mut(),
+                crate::db::projects::NewProject {
+                    name: "Written before the upgrade".to_owned(),
+                    description: "Must survive it".to_owned(),
+                    color: "indigo".to_owned(),
+                    key_prefix: None,
+                    directory_path: None,
+                },
+            )
+            .expect("project");
+
+            let column = crate::db::columns::list(db.connection(), &board).expect("columns")[0]
+                .id
+                .clone();
+            let task = crate::db::tasks::create(
+                db.connection_mut(),
+                crate::db::tasks::NewTask {
+                    column_id: column,
+                    title: "An older task".to_owned(),
+                },
+            )
+            .expect("task");
+            task_id = task.id;
+
+            crate::db::subtasks::create(db.connection_mut(), &task_id, "An older subtask")
+                .expect("subtask");
+            assert_eq!(project.name, "Written before the upgrade");
+        }
+
+        // Reopened against the newer migration list: this is what a user gets
+        // when they install a build that knows one more migration than they do.
+        let db = Database::open_with(&path, UPGRADED).expect("the upgrade succeeds");
+
+        assert_eq!(
+            current_version(db.connection()).expect("version"),
+            2,
+            "the schema version must advance"
+        );
+
+        let (title, description): (String, String) = db
+            .connection()
+            .query_row(
+                "SELECT t.title, p.description FROM tasks t                  JOIN projects p ON p.id = t.project_id WHERE t.id = ?1",
+                [&task_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("the task written before the upgrade is still there");
+        assert_eq!(title, "An older task");
+        assert_eq!(description, "Must survive it");
+
+        let subtasks: i64 = db
+            .connection()
+            .query_row("SELECT COUNT(*) FROM subtasks", [], |row| row.get(0))
+            .expect("subtasks");
+        assert_eq!(subtasks, 1, "children survive the upgrade too");
+
+        // The new column exists and is readable, which is what makes this an
+        // upgrade rather than a no-op that happened to leave the data alone.
+        let colour: Option<String> = db
+            .connection()
+            .query_row(
+                "SELECT colour FROM tasks WHERE id = ?1",
+                [&task_id],
+                |row| row.get(0),
+            )
+            .expect("the added column is queryable");
+        assert_eq!(colour, None);
+
+        // A pre-migration backup is the promise `docs/data-and-backups.md` §4
+        // makes, and an upgrade over real data is exactly when it matters.
+        let backups = crate::db::backup::list(&directory.path().join(crate::db::BACKUP_DIR_NAME))
+            .expect("backups list");
+        assert!(
+            backups.iter().any(|b| b.label == "pre-migration-1"),
+            "an upgrade must snapshot the database first, found: {:?}",
+            backups.iter().map(|b| &b.label).collect::<Vec<_>>()
+        );
+    }
+
     #[test]
     fn applies_pending_migrations_and_records_the_version() {
         let db = Database::open_in_memory().expect("in-memory database should open");

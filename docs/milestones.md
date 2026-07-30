@@ -312,7 +312,7 @@ Acceptance criteria:
   the dev server stopped and network disabled, and the core workflow completed by hand.
 - Release build asserted **not** to contain the WebDriver permission.
 - No console errors during primary workflows.
-- Every visual state in `docs/testing.md` §Visual inspected and corrected.
+- Every visual state in `docs/visual-review.md` inspected and corrected.
 - All documentation deliverables complete, including an honest "Known limitations".
 
 **In progress on 2026-07-30.** What is done and what is not:
@@ -343,11 +343,23 @@ Acceptance criteria:
 - ✅ **No console output during the primary workflow**, asserted end to end by a collector installed
   before the workflow runs and covering `console.error`, `console.warn`, uncaught errors and
   unhandled rejections.
-- ⛔ **Not done:** launching the packaged app from Finder with the dev server stopped and network
-  disabled, and completing the core workflow by hand. That is a person's job, not a command's, and
-  claiming it without doing it would be the one dishonesty this plan exists to prevent.
-- ⛔ **Not done:** the React Profiler assertion that typing in the editor re-renders no column or
-  card. The target is stated in product-spec §9 and is currently unmeasured.
+- ⛔ **Not done, and not doable here:** launching the packaged app from Finder with the dev server
+  stopped and network disabled, and completing the core workflow by hand. That is a person's job,
+  not a command's, and claiming it without doing it would be the one dishonesty this plan exists to
+  prevent. It blocks release criteria 4 and 5, and it is the only thing that does.
+- ✅ **Typing in the editor re-renders no card.** 43 characters, **0 card renders** on a six-card
+  board (`src/features/board/rerender.test.tsx`). Counted by mocking `TaskCard` with a wrapper that
+  increments and delegates to the real component: a `<Profiler>` cannot answer this alone, because
+  the editor is in the same React tree and a commit for the dialog fires the profiler for the whole
+  subtree. A second test asserts the counter *does* rise when the board data changes — without it, a
+  mock that never wired up would make the zero pass for the wrong reason.
+- ✅ **A migration from a prior-schema fixture.** A database is opened at the real released schema 1,
+  populated through the ordinary commands, then reopened against a migration list with a second,
+  additive migration. The version advances, every row and child row survives, the added column is
+  queryable, and a `pre-migration-1` snapshot was taken first.
+- ✅ **The §Visual reference is fixed.** Release criterion 7 pointed at a section of
+  `docs/testing.md` that does not exist; the visual states live in `docs/visual-review.md`, which is
+  where both the criterion and the milestone now point.
 
 ---
 
