@@ -8,6 +8,7 @@
 export const queryKeys = {
   appInfo: () => ["app-info"] as const,
   databaseInfo: () => ["database-info"] as const,
+  backups: () => ["backups"] as const,
   preferences: () => ["preferences"] as const,
   workspace: () => ["workspace"] as const,
   projects: (includeArchived: boolean) => ["projects", { includeArchived }] as const,

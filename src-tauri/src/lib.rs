@@ -34,7 +34,14 @@ pub fn run() {
                 Ok(database) => AppState::ready(database),
                 Err(error) => {
                     eprintln!("startup: could not open the database: {error}");
-                    AppState::failed(error)
+                    // The path is resolved again rather than carried out of the
+                    // failure, because the recovery screen lists the backups
+                    // beside it — and "where is my data" is the question that
+                    // screen exists to answer.
+                    let path = resolve_data_dir(app.handle())
+                        .ok()
+                        .map(|dir| dir.join(DATABASE_FILE_NAME));
+                    AppState::failed(error, path)
                 }
             };
             app.manage(state);
@@ -55,6 +62,11 @@ pub fn run() {
             commands::app_info::app_info,
             commands::database::database_info,
             commands::database::backup_create,
+            commands::transfer::export_data,
+            commands::transfer::import_preview,
+            commands::transfer::import_apply,
+            commands::transfer::backups_list,
+            commands::transfer::backup_restore,
             commands::preferences::preferences_get,
             commands::preferences::preferences_set_theme,
             commands::preferences::window_set_theme,

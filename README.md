@@ -162,12 +162,13 @@ database first, so a restore is itself reversible.
 
 Written honestly, and kept current as the milestones land.
 
-- **Milestones 1–8 are complete.** Projects, boards, columns with work-in-progress limits, the full
-  task editor, search, filters, undo, and the themed and accessible interface. Nothing in the
-  interface is a placeholder or a dead control.
-- **There is no export or import yet, and backups are manual.** Your data is a plain SQLite file you
-  can copy; "Back up now" in Settings makes a snapshot. Automatic retention and JSON export/import
-  are milestone 9.
+- **Milestones 1–8 are complete, and milestone 9 is most of the way there.** Projects, boards,
+  columns with work-in-progress limits, the full task editor, search, filters, undo, the themed and
+  accessible interface, and JSON export/import with backup and restore. Nothing in the interface is
+  a placeholder or a dead control.
+- **The export format has only ever had one version**, so the upgrade chain that reads older files
+  exists but has nothing old to read yet. It is unit-tested against a newer version being refused,
+  not against a real older fixture — that arrives with the second format change.
 - **Task descriptions render a restricted subset of markdown.** No raw HTML, no remote images, and
   links open in your browser rather than inside the app. That is deliberate, not an omission.
 - **Pointer drag works but is not covered by an automated test.** Tasks can be dragged with the
@@ -180,8 +181,9 @@ Written honestly, and kept current as the milestones land.
   moves. Keyboard *reachability* is asserted structurally against the real document instead — no
   positive `tabindex`, nothing stranded, one entry point per composite widget — which is what makes
   document order the tab order. See [`docs/testing.md`](docs/testing.md).
-- **Backup retention is not yet enforced.** Automatic pruning to the 10 most recent lands in
-  milestone 9; until then nothing is deleted at all, which errs in the safe direction.
+- **The system file dialogs are not covered by an automated test.** They are native windows the
+  WebDriver session cannot reach, so the export and import specs call the commands with a path
+  directly. Everything either side of the dialog is covered end to end.
 - **Windows and Linux are unverified.** Nothing platform-specific has been written, but nothing has
   been built or run there either.
 - **End-to-end tests use WebdriverIO, not Playwright.** Apple ships no WebDriver for WKWebView, so

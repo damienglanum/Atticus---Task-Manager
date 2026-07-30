@@ -4,6 +4,7 @@
 //! writer by construction, so no command can interleave with another mid-
 //! transaction. See `docs/architecture.md` §8.
 
+use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
 use crate::commands::board::UndoRecord;
@@ -26,6 +27,14 @@ pub enum AppState {
     },
     Failed {
         error: AppError,
+        /// Where the database *would* have been.
+        ///
+        /// Kept even though there is no connection, because the recovery screen
+        /// exists to answer "where is my data now?" — and listing the backups
+        /// beside the database is the most useful answer there is. Without this,
+        /// every backup command needs a working database, which is precisely
+        /// what the user does not have at that moment.
+        database_path: Option<PathBuf>,
     },
 }
 
@@ -37,8 +46,25 @@ impl AppState {
         }
     }
 
-    pub fn failed(error: AppError) -> Self {
-        Self::Failed { error }
+    pub fn failed(error: AppError, database_path: Option<PathBuf>) -> Self {
+        Self::Failed {
+            error,
+            database_path,
+        }
+    }
+
+    /// The database file's location, whether or not it opened.
+    pub fn database_path(&self) -> Option<PathBuf> {
+        match self {
+            Self::Failed { database_path, .. } => database_path.clone(),
+            Self::Ready { database, .. } => match database.lock() {
+                Ok(guard) => guard.path().map(std::path::Path::to_path_buf),
+                Err(poisoned) => poisoned
+                    .into_inner()
+                    .path()
+                    .map(std::path::Path::to_path_buf),
+            },
+        }
     }
 
     /// Records how to reverse an operation that has already happened.
@@ -90,7 +116,7 @@ impl AppState {
 
     pub fn undo_available(&self) -> AppResult<bool> {
         match self {
-            Self::Failed { error } => Err(error.clone()),
+            Self::Failed { error, .. } => Err(error.clone()),
             Self::Ready { undo, .. } => {
                 let stack = undo.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 Ok(!stack.is_empty())
@@ -101,7 +127,7 @@ impl AppState {
     pub fn startup_error(&self) -> Option<&AppError> {
         match self {
             Self::Ready { .. } => None,
-            Self::Failed { error } => Some(error),
+            Self::Failed { error, .. } => Some(error),
         }
     }
 
@@ -113,7 +139,7 @@ impl AppState {
     /// of the session. The panic is still reported to the log.
     pub fn database(&self) -> AppResult<MutexGuard<'_, Database>> {
         match self {
-            Self::Failed { error } => Err(error.clone()),
+            Self::Failed { error, .. } => Err(error.clone()),
             Self::Ready { database, .. } => match database.lock() {
                 Ok(guard) => Ok(guard),
                 Err(poisoned) => {

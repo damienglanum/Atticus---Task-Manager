@@ -46,6 +46,15 @@ export function describeAppError(error: AppError): string {
       return `${error.field}: ${error.message}`;
     case "not_found":
       return `${error.entity} ${error.id} was not found.`;
+    // Summarised here and listed in full by the import dialog, which has the
+    // room to show a path per issue. A toast does not, and truncating a list of
+    // JSON paths into one line helps nobody.
+    case "import_invalid": {
+      const count = error.issues.length;
+      return count === 1
+        ? `This file cannot be imported: ${error.issues[0]?.message ?? "one problem was found."}`
+        : `This file cannot be imported: ${String(count)} problems were found.`;
+    }
     case "conflict":
     case "database":
     case "io":

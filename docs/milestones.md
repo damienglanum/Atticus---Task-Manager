@@ -254,6 +254,53 @@ issues by JSON path. Older-version fixture imports correctly. Newer version is r
 mode backs up first. Restore backs up the current database first and rolls back automatically if
 the restored file fails to open.
 
+Acceptance criteria, met on 2026-07-30 except where noted:
+
+- ✅ **US-25 export.** Everything or one project, archived records included, pretty-printed so the
+  file is readable and diffable. The single-project fixture has *two* projects, because a
+  one-project fixture cannot fail a scoping bug, and the test asserts every exported row carries the
+  right project rather than counting them.
+- ✅ **Validation before any write.** Pure, SQLite-free, and collects **every** problem with its JSON
+  path (`data.tasks[3].columnId`) rather than stopping at the first — asserted by a test that breaks
+  four things and expects four issues. `AppError::ImportInvalid` carries the list; the panel shows
+  it on screen, where a toast could not.
+- ✅ **An invalid document writes nothing**, asserted in *replace* mode against a populated database,
+  which is also the assertion that validation runs before the delete rather than after it.
+- ✅ **One transaction.** A duplicate task number trips the unique index part-way through and the
+  test asserts projects, tasks and columns are all back to zero.
+- ✅ **US-25 merge and replace.** Merge allocates fresh ids and overwrites nothing; importing the same
+  file twice creates two copies, which is ADR-0006's stated decision and has a test named for it.
+  Replace takes a `pre-import` backup first and requires the word typed.
+- ✅ **US-26 backups.** Listing newest-first, retention pruning that keeps ten automatic snapshots and
+  **never** touches a manual one, and restore that snapshots the current database first, refuses a
+  file that is not a database before moving anything, and puts the previous one back if the restored
+  file fails to open.
+- ✅ **Pre-delete backups**, since project deletion is the one destructive action undo cannot reach.
+- ✅ **The panel**: scope picker, dry-run summary in words, the issue list, and the typed replace gate.
+- ✅ **A fixture for every released version.** `tests/fixtures/exports/v1.json` is checked in and
+  imported by a test that asserts the values a careless upgrade function would quietly drop — a due
+  date, an estimate, a WIP limit, a `done` flag, an archived timestamp and a saved filter's JSON —
+  rather than counting rows. A third test fails if `CURRENT_EXPORT_VERSION` is raised without a
+  matching fixture, so ADR-0006's "kept forever" promise is enforced rather than remembered.
+- ✅ **Recovery lists the backups.** `backups_list` deliberately does *not* require a working
+  database: needing one in order to be told where your backups are is exactly backwards. The state
+  now carries the database path through a failed start, and the recovery screen shows every snapshot
+  with its path, size and whether the user took it.
+- ⚠️ **Restoring from the recovery screen is not offered**, only locating. Restoring needs a live
+  connection to snapshot the database it is replacing, and in that state there is none. The by-hand
+  procedure is documented and the paths are on screen, selectable.
+- ⛔ **Not covered end to end:** the system save and open dialogs — native windows outside the
+  WebDriver session. Everything either side of them is.
+
+Gate green: 278 component tests (up from 265), 265 Rust tests (up from 207), `npm run verify` clean.
+End-to-end: **84 specs, all passing**, including a real export-to-disk and re-import round trip.
+
+**The file dialogs are not driven, and the round-trip spec says so.** They are native windows outside
+the WebDriver session — the same gap `docs/testing.md` records for the file picker — so
+`transfer.e2e.ts` calls the commands with a path directly, through `window.__TAURI_INTERNALS__`.
+What that still proves is that a real database exports to a real file, that the file is refused when
+malformed, and that it imports back into a running application and reaches the board.
+
 ## M10 — Testing, performance, packaging, documentation
 
 **Delivers:** a shippable application.

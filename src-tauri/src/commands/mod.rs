@@ -11,3 +11,4 @@ pub mod detail;
 pub mod find;
 pub mod preferences;
 pub mod projects;
+pub mod transfer;

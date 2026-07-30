@@ -66,6 +66,21 @@ pub fn project_delete(
     confirm_name: String,
 ) -> AppResult<DeletedCounts> {
     let mut database = state.database()?;
+
+    // Project deletion is the one destructive action that is deliberately *not*
+    // undoable (ADR-0009), so it gets a snapshot instead. Taken only once the
+    // project is known to exist, so a stale id does not litter the backup
+    // folder with copies of a deletion that never happened.
+    projects::find(database.connection(), &id)?;
+    if let Some(directory) = database
+        .path()
+        .and_then(std::path::Path::parent)
+        .map(|parent| parent.join(crate::db::BACKUP_DIR_NAME))
+    {
+        crate::db::backup::write_snapshot(database.connection(), &directory, "pre-delete")?;
+        crate::db::backup::prune(&directory)?;
+    }
+
     projects::delete(database.connection_mut(), &id, &confirm_name)
 }
 

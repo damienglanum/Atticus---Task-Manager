@@ -5,6 +5,46 @@ otherwise be invisible archaeology. Newest first.
 
 ---
 
+## M9 — Import/export, backup/restore, recovery
+
+**2026-07-30 · Export and import move files through Rust, not through the webview.**
+The first shape returned the whole document to the frontend and took it back again for the apply —
+two IPC crossings of a potentially large payload, and a webview holding the user's entire database
+in a variable. Now the frontend passes a *path* chosen by the system dialog and Rust does the
+reading and writing. The webview holds no filesystem permission (ADR-0007) and never sees the
+document. `dialog:allow-save` is the one capability this milestone added.
+
+**2026-07-30 · The import file is read twice, deliberately.**
+`import_preview` and `import_apply` are separate commands, and nothing guarantees the file is
+unchanged between them — so the apply re-reads and re-validates rather than trusting the plan the
+user agreed to. The cost is one extra read of a local file; the alternative is applying a document
+nobody previewed.
+
+**2026-07-30 · `restore` takes the database, not a connection.**
+The first version took `&Connection` for the safety snapshot and documented that the caller must
+drop it before calling, because SQLite holds the file open. The first test that used it failed with
+"database is locked" — a doc comment is not a mechanism. It now takes `&mut Database` and closes and
+reopens it internally, so the footgun no longer exists. `Database::detach` swaps the live connection
+for an in-memory placeholder to close it, which is also what makes the WAL sidecars safe to delete.
+
+**2026-07-30 · Imported file references arrive unverified.**
+`found` and `last_verified_at` are neither exported nor imported. They are facts about one machine's
+filesystem at one past moment, and carrying them across is precisely how a missing file gets
+displayed as present. An imported reference is checked when its task is next opened, like any other.
+
+**2026-07-30 · Project deletion takes a snapshot, because it is the one thing undo cannot reach.**
+ADR-0009 makes project deletion non-undoable and says so in its dialog. A `pre-delete` backup is
+therefore taken in the command — after the project is known to exist, so a stale id does not litter
+the folder with copies of a deletion that never happened.
+
+**2026-07-30 · A backup's timestamp is read from its name, not its mtime.**
+Copying or restoring a file rewrites its modification time, but the name still records when the
+snapshot was taken. Parsing has to find the 13-digit millisecond component rather than the last
+hyphen-separated one, because labels contain hyphens and digits (`pre-migration-3`) and a collision
+suffix (`-1`) sits after the timestamp.
+
+---
+
 ## M8 — Theme, accessibility, responsive, visual polish
 
 **2026-07-30 · The board tablist had three tab stops, and the fix moved a feature.**

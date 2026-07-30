@@ -355,6 +355,14 @@ export function App() {
           setTheme.mutate(next);
         }}
         themePending={setTheme.isPending}
+        projects={active}
+        onDataReplaced={() => {
+          // An import or a restore replaces the ids the workspace points at, so
+          // the remembered selection is meaningless and would show an empty
+          // board. Clearing it lets the shell fall back to whatever is there.
+          setRequestedTaskId(null);
+          setWorkspace.mutate({ projectId: null, boardId: null });
+        }}
       />
 
       <Toaster />

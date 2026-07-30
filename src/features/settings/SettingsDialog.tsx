@@ -4,10 +4,12 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { notify, notifyError } from "@/app/toast";
+import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
 import { describeAppError, toAppError } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
 import { queryKeys } from "@/lib/query/keys";
+import { DataPanel } from "./DataPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ThemeControl } from "./ThemeControl";
 
@@ -17,6 +19,9 @@ interface SettingsDialogProps {
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
   themePending: boolean;
+  projects: Project[];
+  /** Called after an import or restore, which replaces everything on screen. */
+  onDataReplaced: () => void;
 }
 
 export function SettingsDialog({
@@ -25,6 +30,8 @@ export function SettingsDialog({
   theme,
   onThemeChange,
   themePending,
+  projects,
+  onDataReplaced,
 }: SettingsDialogProps) {
   const client = useQueryClient();
 
@@ -81,9 +88,11 @@ export function SettingsDialog({
           </Button>
           <p className="text-fg-secondary mt-2 text-2xs">
             Writes a timestamped copy beside the database. A backup is also taken automatically
-            before any schema change.
+            before any schema change. Backups you take by hand are never pruned.
           </p>
         </section>
+
+        <DataPanel projects={projects} onDataReplaced={onDataReplaced} />
       </div>
     </Dialog>
   );

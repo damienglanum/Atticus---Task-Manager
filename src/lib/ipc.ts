@@ -10,6 +10,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { AppInfo } from "./bindings/AppInfo";
+import type { BackupInfo } from "./bindings/BackupInfo";
+import type { ExportScope } from "./bindings/ExportScope";
+import type { ImportMode } from "./bindings/ImportMode";
+import type { ImportPlan } from "./bindings/ImportPlan";
+import type { ImportResult } from "./bindings/ImportResult";
 import type { ArchiveResult } from "./bindings/ArchiveResult";
 import type { Board } from "./bindings/Board";
 import type { BoardPatch } from "./bindings/BoardPatch";
@@ -157,6 +162,38 @@ export const ipc = {
     const chosen = await open({ multiple: false, directory: false });
     return typeof chosen === "string" ? chosen : null;
   },
+
+  /** The system open dialog, filtered to export files. */
+  pickImportFile: async (): Promise<string | null> => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const chosen = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Atticus export", extensions: ["json"] }],
+    });
+    return typeof chosen === "string" ? chosen : null;
+  },
+
+  /** The system save dialog. Returns null when the user cancelled. */
+  pickExportDestination: async (suggestedName: string): Promise<string | null> => {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const chosen = await save({
+      defaultPath: suggestedName,
+      filters: [{ name: "Atticus export", extensions: ["json"] }],
+    });
+    return typeof chosen === "string" ? chosen : null;
+  },
+
+  // Export and import move through Rust rather than the webview: the document
+  // never enters the frontend, which holds no filesystem permission (ADR-0007).
+  exportData: (scope: ExportScope, path: string) => call<string>("export_data", { scope, path }),
+  importPreview: (path: string) => call<ImportPlan>("import_preview", { path }),
+  importApply: (path: string, mode: ImportMode) =>
+    call<ImportResult>("import_apply", { path, mode }),
+
+  backupsList: () => call<BackupInfo[]>("backups_list"),
+  /** Returns where the database that was replaced has been saved. */
+  backupRestore: (path: string) => call<string>("backup_restore", { path }),
 
   tasksSearch: (query: string) => call<SearchHit[]>("tasks_search", { query }),
 

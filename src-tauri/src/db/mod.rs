@@ -9,7 +9,9 @@ mod board_tests;
 pub mod board_view;
 pub mod boards;
 pub mod columns;
+pub mod export;
 pub mod file_refs;
+pub mod import;
 pub mod labels;
 pub mod migrations;
 pub mod ordering;
@@ -122,6 +124,32 @@ impl Database {
 
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// Closes the live connection, leaving this handle pointing at an empty
+    /// in-memory database.
+    ///
+    /// Exists so the file underneath can be replaced. SQLite holds the file
+    /// open, and copying over it while a connection is live is how a restore
+    /// reports "database is locked" — or worse, succeeds against a handle that
+    /// is still reading the inode that is no longer there.
+    pub fn detach(&mut self) -> AppResult<()> {
+        let placeholder = Connection::open_in_memory().map_err(database_error)?;
+        let live = std::mem::replace(&mut self.conn, placeholder);
+
+        live.close().map_err(|(_, error)| database_error(error))?;
+        Ok(())
+    }
+
+    /// Replaces this handle with a freshly opened database at the same path.
+    pub fn reopen(&mut self) -> AppResult<()> {
+        let path = self
+            .path
+            .clone()
+            .ok_or_else(|| AppError::internal("cannot reopen an in-memory database"))?;
+
+        *self = Self::open(&path)?;
+        Ok(())
     }
 
     pub fn table_exists(&self, name: &str) -> AppResult<bool> {

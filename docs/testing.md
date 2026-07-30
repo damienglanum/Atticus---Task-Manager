@@ -182,10 +182,15 @@ Honest list, kept current:
 - **A driven Tab walk and Enter-to-activate, end to end** — see above. The cause is now known, and
   keyboard *reachability* is asserted structurally end to end rather than left to the component
   layer alone.
-- **The system file dialog is never opened by a test.** `ipc.pickFile` is mocked in component tests
-  and not exercised end to end at all: the dialog is a native window the WebDriver session cannot
-  reach. What is covered is everything either side of it — path validation and canonicalisation in
-  Rust, the missing-file state, relocation, and that a cancelled dialog adds nothing.
+- **The system file dialogs are never opened by a test.** Both the file picker and the save dialog
+  are native windows outside the WebDriver session. `transfer.e2e.ts` steps over them by calling
+  `export_data`, `import_preview` and `import_apply` with a path, through
+  `window.__TAURI_INTERNALS__` — the same entry point `@tauri-apps/api` uses, reached directly
+  because `browser.execute` ships a raw function to the page and a bare module specifier has nothing
+  to resolve against. Everything either side of the dialog is covered.
+  For file references specifically, `ipc.pickFile` is mocked in component tests and never exercised
+  end to end. What is covered is everything either side of it — path validation and canonicalisation
+  in Rust, the missing-file state, relocation, and that a cancelled dialog adds nothing.
 - **Nothing measures startup time or board-render time.** The one performance target with a test is
   search: 5,000 tasks, measured at 5.2 ms against a 100 ms budget. The rest of product-spec §9 is
   measured in M10.

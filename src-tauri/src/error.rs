@@ -38,8 +38,33 @@ pub enum AppError {
         backup_path: Option<String>,
     },
 
+    /// Every problem found in an import file, each with the JSON path that
+    /// carries it. Plural by design: a user fixing a hand-edited export should
+    /// see the whole list once, not discover the next problem on each attempt.
+    #[error("this file cannot be imported: {} problem(s) found", issues.len())]
+    ImportInvalid { issues: Vec<ImportIssue> },
+
     #[error("internal error: {message}")]
     Internal { message: String },
+}
+
+/// One problem with an import file, located the way JSON is located.
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "ImportIssue.ts")]
+pub struct ImportIssue {
+    /// A JSON path into the document, e.g. `data.tasks[3].columnId`.
+    pub path: String,
+    pub message: String,
+}
+
+impl ImportIssue {
+    pub fn new(path: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            message: message.into(),
+        }
+    }
 }
 
 impl AppError {

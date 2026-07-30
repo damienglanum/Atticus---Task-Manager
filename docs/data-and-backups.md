@@ -3,7 +3,7 @@
 Where your data is, what protects it, and how to get it back.
 
 Status: the backup and migration machinery described here is **implemented and tested** as of
-milestone 2. Export/import (§6) is specified but arrives in milestone 9, and is marked as such.
+milestone 2; export, import, retention and in-app restore landed in milestone 9.
 
 ---
 
@@ -59,8 +59,9 @@ A snapshot is a complete, standalone database. You can open it directly with `sq
 |---|---|---|
 | You click **Back up now** | `manual-<timestamp>.sqlite3` | Implemented |
 | An existing database is about to be migrated | `pre-migration-<from>-<timestamp>.sqlite3` | Implemented |
-| Before a replace-mode import | `pre-import-<timestamp>.sqlite3` | Milestone 9 |
-| Before deleting a project | `pre-delete-<timestamp>.sqlite3` | Milestone 9 |
+| Before a replace-mode import | `pre-import-<timestamp>.sqlite3` | Implemented |
+| Before deleting a project | `pre-delete-<timestamp>.sqlite3` | Implemented |
+| Before restoring a backup | `pre-restore-<timestamp>.sqlite3` | Implemented |
 
 A brand-new database at version 0 is **not** backed up before its first migration — there is
 nothing to lose. Tested by `a_fresh_database_is_not_backed_up_before_its_first_migration`.
@@ -71,8 +72,8 @@ same millisecond, the second gets a numeric suffix rather than overwriting the f
 ### Retention
 
 Automatic backups are pruned to the 10 most recent. **Manual backups are never pruned
-automatically** — if you asked for it, only you delete it. (Pruning lands in milestone 9; until
-then, nothing is deleted at all.)
+automatically** — if you asked for it, only you delete it. Both halves are asserted by tests: that
+fifteen automatic snapshots become the ten newest, and that fifteen manual ones stay fifteen.
 
 ## 4. If a migration fails
 
@@ -97,10 +98,10 @@ build added. Either update the application, or restore a backup taken before the
 
 Refusing to open writes **nothing** — not even a backup. Tested.
 
-## 6. Export and import — milestone 9
+## 6. Export and import
 
 Specified in [`product-spec.md`](product-spec.md) §7 and
-[ADR-0006](adr/0006-import-export-versioning.md). Summary of the contract:
+[ADR-0006](adr/0006-import-export-versioning.md), and implemented in milestone 9. The contract:
 
 - JSON with an `exportVersion` independent of the schema version and the app version.
 - Import validates the **whole document before any write**; a malformed file writes nothing.
@@ -110,9 +111,15 @@ Specified in [`product-spec.md`](product-spec.md) §7 and
 - File references export as **paths, not contents**. Restoring on a different machine will show
   "missing file" states, which is honest rather than surprising.
 
-## 7. Restoring by hand
+## 7. Restoring
 
-Until the in-app restore lands in milestone 9:
+**In the application:** Settings → Backups lists every snapshot with its size and whether you took
+it. Restoring backs up the current database first, checks the snapshot really is a database *before*
+moving anything, and puts the previous one back automatically if the restored file fails to open.
+
+### By hand
+
+If the application will not start at all:
 
 1. Quit Atticus.
 2. Move the current `takenkanban.sqlite3`, `-wal`, and `-shm` files somewhere safe.

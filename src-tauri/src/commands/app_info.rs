@@ -16,6 +16,14 @@ pub struct AppInfo {
     pub platform: String,
 }
 
+/// The build's own version, for anything that has to stamp a file with it.
+///
+/// Read from Cargo rather than from the `AppHandle`, so a command that does not
+/// already need the handle does not take one purely to learn its own version.
+pub fn version() -> String {
+    env!("CARGO_PKG_VERSION").to_owned()
+}
+
 #[tauri::command]
 pub fn app_info(app: AppHandle) -> AppResult<AppInfo> {
     let data_dir = app
