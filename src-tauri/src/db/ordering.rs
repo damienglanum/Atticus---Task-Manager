@@ -60,6 +60,12 @@ pub const FILE_REFS: Ordered = Ordered {
     live_predicate: None,
 };
 
+pub const NOTES: Ordered = Ordered {
+    table: "notes",
+    parent_column: Some("project_id"),
+    live_predicate: None,
+};
+
 pub const SAVED_FILTERS: Ordered = Ordered {
     table: "saved_filters",
     parent_column: Some("project_id"),

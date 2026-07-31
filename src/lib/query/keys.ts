@@ -21,6 +21,8 @@ export const queryKeys = {
   search: (query: string) => ["search", query] as const,
   savedFilters: (projectId: string) => ["saved-filters", projectId] as const,
   boardFilter: (boardId: string) => ["board-filter", boardId] as const,
+  notes: (projectId: string) => ["notes", projectId] as const,
+  profileName: () => ["profile-name"] as const,
 } as const;
 
 /** Everything that a project mutation can invalidate. */

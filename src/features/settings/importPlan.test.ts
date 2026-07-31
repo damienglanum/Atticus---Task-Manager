@@ -13,6 +13,7 @@ function plan(partial: Partial<ImportPlan>): ImportPlan {
     labels: 0,
     fileRefs: 0,
     savedFilters: 0,
+    notes: 0,
     ...partial,
   };
 }

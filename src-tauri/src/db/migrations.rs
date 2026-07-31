@@ -10,17 +10,25 @@ use rusqlite::Connection;
 
 use crate::error::{AppError, AppResult};
 
+#[derive(Clone)]
 pub struct Migration {
     pub version: u32,
     pub description: &'static str,
     pub sql: &'static str,
 }
 
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    description: "initial schema",
-    sql: include_str!("schema/m0001_initial.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        description: "initial schema",
+        sql: include_str!("schema/m0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        description: "notes",
+        sql: include_str!("schema/m0002_notes.sql"),
+    },
+];
 
 /// The version this build knows how to produce.
 pub fn latest_version(migrations: &[Migration]) -> u32 {
@@ -118,45 +126,36 @@ mod tests {
     use super::*;
     use crate::db::Database;
 
-    const BROKEN: &[Migration] = &[
-        Migration {
-            version: 1,
-            description: "initial schema",
-            sql: include_str!("schema/m0001_initial.sql"),
-        },
-        Migration {
-            version: 2,
+    /// Just the first released migration, so a test can stand a database up at
+    /// the schema a previous build produced and then upgrade it for real.
+    const RELEASED_V1: &[Migration] = &[Migration {
+        version: 1,
+        description: "initial schema",
+        sql: include_str!("schema/m0001_initial.sql"),
+    }];
+
+    /// A migration that fails, one version past whatever is currently released,
+    /// so releasing another one moves this forward rather than breaking it.
+    fn broken() -> Vec<Migration> {
+        let mut list = Vec::from(MIGRATIONS);
+        list.push(Migration {
+            version: latest_version(MIGRATIONS) + 1,
             description: "deliberately invalid",
             sql: "CREATE TABLE good_table (id TEXT PRIMARY KEY);
                   CREATE TABLE bad_table (id TEXT REFERENCES nonexistent_table (id));
                   INSERT INTO not_a_table VALUES (1);",
-        },
-    ];
-
-    /// A realistic *next* migration: additive, which is the only shape a
-    /// migration over live data is allowed to take without a data-moving step.
-    const UPGRADED: &[Migration] = &[
-        Migration {
-            version: 1,
-            description: "initial schema",
-            sql: include_str!("schema/m0001_initial.sql"),
-        },
-        Migration {
-            version: 2,
-            description: "a column added to a populated table",
-            sql: "ALTER TABLE tasks ADD COLUMN colour TEXT;
-                  CREATE INDEX ix_tasks_colour ON tasks (colour) WHERE colour IS NOT NULL;",
-        },
-    ];
+        });
+        list
+    }
 
     /// Product-spec §12.6 asks for "a migration from a prior-schema fixture".
     ///
-    /// The prior schema is the real, released version 1 — there is no second
-    /// released migration yet, so the *next* one is defined here rather than
-    /// invented in a fixture file. What is being tested is the upgrade path over
-    /// **real data written by the real code**, which is the part that can lose
-    /// somebody's work: the version advances, every row survives, and a backup
-    /// was taken before any of it happened.
+    /// This is now the **real** upgrade: a database stood up at released schema
+    /// 1, populated through the ordinary commands so the rows are shaped the way
+    /// real rows are, then reopened by a build that knows schema 2. What is being
+    /// tested is the part that can lose somebody's work — the version advances,
+    /// every row survives, the newly added table is queryable, and a backup was
+    /// taken before any of it happened.
     #[test]
     fn a_populated_database_upgrades_from_the_prior_schema_without_losing_anything() {
         let directory = tempfile::tempdir().expect("temp dir");
@@ -166,7 +165,7 @@ mod tests {
         {
             // Opened at version 1 and populated through the ordinary commands, so
             // the rows are shaped the way real rows are rather than hand-written.
-            let mut db = Database::open_with(&path, MIGRATIONS).expect("v1 opens");
+            let mut db = Database::open_with(&path, RELEASED_V1).expect("v1 opens");
             assert_eq!(current_version(db.connection()).expect("version"), 1);
 
             let (project, board) = crate::db::projects::create(
@@ -199,9 +198,9 @@ mod tests {
             assert_eq!(project.name, "Written before the upgrade");
         }
 
-        // Reopened against the newer migration list: this is what a user gets
-        // when they install a build that knows one more migration than they do.
-        let db = Database::open_with(&path, UPGRADED).expect("the upgrade succeeds");
+        // Reopened against the released migration list: this is what a user gets
+        // when they install a build that knows more migrations than they do.
+        let db = Database::open_with(&path, MIGRATIONS).expect("the upgrade succeeds");
 
         assert_eq!(
             current_version(db.connection()).expect("version"),
@@ -226,17 +225,13 @@ mod tests {
             .expect("subtasks");
         assert_eq!(subtasks, 1, "children survive the upgrade too");
 
-        // The new column exists and is readable, which is what makes this an
+        // What schema 2 added exists and is readable, which is what makes this an
         // upgrade rather than a no-op that happened to leave the data alone.
-        let colour: Option<String> = db
+        let notes: i64 = db
             .connection()
-            .query_row(
-                "SELECT colour FROM tasks WHERE id = ?1",
-                [&task_id],
-                |row| row.get(0),
-            )
-            .expect("the added column is queryable");
-        assert_eq!(colour, None);
+            .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
+            .expect("the added table is queryable");
+        assert_eq!(notes, 0, "an upgrade adds the table empty, not populated");
 
         // A pre-migration backup is the promise `docs/data-and-backups.md` §4
         // makes, and an upgrade over real data is exactly when it matters.
@@ -300,7 +295,8 @@ mod tests {
         let mut db = Database::open_in_memory().expect("database should open");
         let before = current_version(db.connection()).expect("version should read");
 
-        let error = apply(db.connection_mut(), BROKEN).expect_err("migration 2 should fail");
+        let error =
+            apply(db.connection_mut(), &broken()).expect_err("the invalid migration should fail");
 
         assert!(matches!(error, AppError::Migration { .. }));
         assert_eq!(

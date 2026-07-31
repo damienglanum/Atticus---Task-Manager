@@ -41,6 +41,8 @@ pub struct ImportPlan {
     pub file_refs: usize,
     #[ts(type = "number")]
     pub saved_filters: usize,
+    #[ts(type = "number")]
+    pub notes: usize,
 }
 
 /// Checks the document and returns what it would create.
@@ -74,6 +76,7 @@ fn plan(document: &ExportDocument) -> ImportPlan {
         labels: data.labels.len(),
         file_refs: data.file_refs.len(),
         saved_filters: data.saved_filters.len(),
+        notes: data.notes.len(),
     }
 }
 
@@ -335,6 +338,22 @@ fn check_children(document: &ExportDocument, issues: &mut Vec<ImportIssue>) {
             issues.push(ImportIssue::new(
                 format!("data.fileRefs[{index}].path"),
                 "A file reference must have a path.",
+            ));
+        }
+    }
+
+    unique_ids(data.notes.iter().map(|n| n.id.as_str()), "notes", issues);
+    for (index, note) in data.notes.iter().enumerate() {
+        if !projects.contains(note.project_id.as_str()) {
+            issues.push(ImportIssue::new(
+                format!("data.notes[{index}].projectId"),
+                format!("No project with id {} is in this file.", note.project_id),
+            ));
+        }
+        if note.title.trim().is_empty() {
+            issues.push(ImportIssue::new(
+                format!("data.notes[{index}].title"),
+                "A note must have a title.",
             ));
         }
     }

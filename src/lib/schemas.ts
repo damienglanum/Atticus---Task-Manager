@@ -15,6 +15,11 @@ export const LIMITS = {
   boardName: 100,
   columnName: 60,
   taskTitle: 500,
+  noteTitle: 200,
+  // Matches `validate::NOTE_TITLE_MAX` and friends in Rust. A name is not stored
+  // by the backend at all — it lives in `ui_state` — so this limit exists only
+  // to stop a paste of a whole document going into a text field.
+  profileName: 80,
   keyPrefixMin: 2,
   keyPrefixMax: 5,
 } as const;

@@ -31,8 +31,20 @@ function setup(props: Partial<Parameters<typeof ProjectSidebar>[0]> = {}) {
     onArchive: vi.fn(),
     onDelete: vi.fn(),
     onOpenSettings: vi.fn(),
+    onNavigate: vi.fn(),
+    onRenameProfile: vi.fn(),
   };
-  render(<ProjectSidebar active={[]} archived={[]} selectedId={null} {...handlers} {...props} />);
+  render(
+    <ProjectSidebar
+      active={[]}
+      archived={[]}
+      selectedId={null}
+      view="board"
+      profileName="Ada Lovelace"
+      {...handlers}
+      {...props}
+    />,
+  );
   return handlers;
 }
 

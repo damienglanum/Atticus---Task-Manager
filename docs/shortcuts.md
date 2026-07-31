@@ -44,11 +44,15 @@ open, `Escape` to close. `Home` and `End` jump to the ends of the list.
 
 | Action | Keys |
 | --- | --- |
-| Save | Nothing — every field writes on its own, and again when the editor closes |
-| Add another subtask | `Enter` in the "Add a subtask" field |
-| Toggle a subtask | `Space` on its checkbox |
+| Save your changes | `⌘Enter`, or the **Save changes** button |
+| Discard them and close | `Escape`, or **Cancel** — both ask first if anything is unsaved |
+| Add another checklist item | `Enter` in the "Add a new checklist item" field |
+| Toggle a checklist item | `Space` on its checkbox |
 | Switch the description between editing and reading | `Enter` on the pencil / eye button |
-| Close, saving anything mid-edit | `Escape` |
+
+Nothing in the editor writes until you save. That changed in v1.1; before it,
+every field wrote on its own and there was no save button at all. See
+design-decisions.md §8.
 
 ## Elsewhere
 

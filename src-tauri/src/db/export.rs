@@ -9,7 +9,7 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::domain::export_format::{
-    ExportBoard, ExportColumn, ExportData, ExportDocument, ExportFileRef, ExportLabel,
+    ExportBoard, ExportColumn, ExportData, ExportDocument, ExportFileRef, ExportLabel, ExportNote,
     ExportProject, ExportSavedFilter, ExportSubtask, ExportTask, ExportTaskLabel,
     CURRENT_EXPORT_VERSION, EXPORT_APP,
 };
@@ -51,6 +51,7 @@ pub fn export(
             task_labels: task_labels(conn, project_id)?,
             file_refs: file_refs(conn, project_id)?,
             saved_filters: saved_filters(conn, project_id)?,
+            notes: notes(conn, project_id)?,
         },
     })
 }
@@ -316,6 +317,28 @@ fn file_refs(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<Expor
                 display_name: row.get(3)?,
                 position: row.get(4)?,
                 created_at: row.get(5)?,
+            })
+        },
+    )
+}
+
+fn notes(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<ExportNote>> {
+    const COLUMNS: &str = "id, project_id, title, body, position, created_at, updated_at";
+
+    query(
+        conn,
+        &format!("SELECT {COLUMNS} FROM notes ORDER BY project_id, position"),
+        &format!("SELECT {COLUMNS} FROM notes WHERE project_id = ?1 ORDER BY position"),
+        project_id,
+        |row| {
+            Ok(ExportNote {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                title: row.get(2)?,
+                body: row.get(3)?,
+                position: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
             })
         },
     )

@@ -88,6 +88,7 @@ pub fn apply(
             "file_refs",
             "subtasks",
             "saved_filters",
+            "notes",
             "labels",
             "tasks",
             "board_columns",
@@ -308,6 +309,22 @@ fn write_children(
                 file_ref.display_name,
                 file_ref.position,
                 file_ref.created_at,
+            ],
+        )?;
+    }
+
+    for note in &data.notes {
+        tx.execute(
+            "INSERT INTO notes (id, project_id, title, body, position, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                new_id(),
+                IdMap::get(&ids.projects, &note.project_id, "project")?,
+                note.title,
+                note.body,
+                note.position,
+                note.created_at,
+                note.updated_at,
             ],
         )?;
     }
@@ -592,6 +609,38 @@ mod fixtures {
         assert_eq!(result.created.labels, 1);
         assert_eq!(result.created.file_refs, 1);
         assert_eq!(result.created.saved_filters, 1);
+    }
+
+    #[test]
+    fn version_1_reads_as_a_document_with_no_notes_rather_than_failing() {
+        // The whole point of the upgrade chain: a file written before notes
+        // existed still imports, and simply has none.
+        let document = read("v1.json");
+        assert!(document.data.notes.is_empty());
+
+        let mut target = Database::open_in_memory().expect("database");
+        let result = apply(target.connection_mut(), &document, ImportMode::Merge).expect("imports");
+        assert_eq!(result.created.projects, 1);
+    }
+
+    #[test]
+    fn version_2_imports_its_notes() {
+        let document = read("v2.json");
+        let mut target = Database::open_in_memory().expect("database");
+
+        apply(target.connection_mut(), &document, ImportMode::Merge).expect("imports");
+
+        let (title, body): (String, String) = target
+            .connection()
+            .query_row("SELECT title, body FROM notes", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .expect("the note");
+        assert_eq!(title, "Pinned so version 2 stays readable forever.");
+        assert!(
+            body.contains("export version 2"),
+            "the body must survive the round trip, got {body:?}"
+        );
     }
 
     #[test]

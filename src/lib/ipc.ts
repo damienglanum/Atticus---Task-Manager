@@ -34,6 +34,8 @@ import type { TaskDetail } from "./bindings/TaskDetail";
 import type { DatabaseInfo } from "./bindings/DatabaseInfo";
 import type { DeletedCounts } from "./bindings/DeletedCounts";
 import type { NewProject } from "./bindings/NewProject";
+import type { Note } from "./bindings/Note";
+import type { NotePatch } from "./bindings/NotePatch";
 import type { Preferences } from "./bindings/Preferences";
 import type { Project } from "./bindings/Project";
 import type { ProjectCreated } from "./bindings/ProjectCreated";
@@ -194,6 +196,11 @@ export const ipc = {
   backupsList: () => call<BackupInfo[]>("backups_list"),
   /** Returns where the database that was replaced has been saved. */
   backupRestore: (path: string) => call<string>("backup_restore", { path }),
+
+  notesList: (projectId: string) => call<Note[]>("notes_list", { projectId }),
+  noteCreate: (projectId: string, title: string) => call<Note>("note_create", { projectId, title }),
+  noteUpdate: (id: string, patch: NotePatch) => call<Note>("note_update", { id, patch }),
+  noteDelete: (id: string) => call<null>("note_delete", { id }),
 
   tasksSearch: (query: string) => call<SearchHit[]>("tasks_search", { query }),
 

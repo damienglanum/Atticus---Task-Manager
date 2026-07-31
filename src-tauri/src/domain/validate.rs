@@ -17,6 +17,8 @@ pub const TASK_DESCRIPTION_MAX: usize = 100_000;
 pub const SUBTASK_TITLE_MAX: usize = 300;
 pub const LABEL_NAME_MAX: usize = 40;
 pub const SAVED_FILTER_NAME_MAX: usize = 60;
+pub const NOTE_TITLE_MAX: usize = 200;
+pub const NOTE_BODY_MAX: usize = 200_000;
 /// Highest priority level. The scale is fixed (US-15 AC1): None, Low, Medium,
 /// High, Urgent. Not user-editable, so it can carry a distinct glyph per level.
 pub const PRIORITY_MAX: i64 = 4;

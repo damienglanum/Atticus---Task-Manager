@@ -10,7 +10,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Plus } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -23,6 +23,7 @@ import type { Task } from "@/lib/bindings/Task";
 import type { UndoRecord } from "@/lib/bindings/UndoRecord";
 import { messageFor } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
+import { queryKeys } from "@/lib/query/keys";
 
 import { ArchivePanel } from "./ArchivePanel";
 import { BoardColumn } from "./BoardColumn";
@@ -61,6 +62,8 @@ interface BoardViewProps {
   projectPrefix: string;
   /** Names the board in its own header, above the columns. */
   projectName: string;
+  /** Shown in the task editor's breadcrumb. */
+  boardName: string;
   /** Board switcher, composed by the shell — it owns the list of boards. */
   tabs?: ReactNode;
   /** Set by the command palette when a search result is chosen. */
@@ -72,9 +75,11 @@ export function BoardView({
   projectId,
   projectPrefix,
   projectName,
+  boardName,
   tabs = null,
   openTaskId: requestedTaskId = null,
 }: BoardViewProps) {
+  const client = useQueryClient();
   const snapshot = useBoardSnapshot(boardId);
 
   const [editing, setEditing] = useState<Column | null>(null);
@@ -104,6 +109,14 @@ export function BoardView({
     setOpenTaskId(requestedTaskId);
   }
   const [archiveOpen, setArchiveOpen] = useState(false);
+
+  const refreshAfterSave = () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.board(boardId) }),
+      client.invalidateQueries({ queryKey: queryKeys.taskDetail(openTaskId ?? "") }),
+      client.invalidateQueries({ queryKey: queryKeys.labels(projectId) }),
+      client.invalidateQueries({ queryKey: queryKeys.undoAvailable() }),
+    ]);
 
   const createColumn = useCreateColumn(boardId);
   const updateColumn = useUpdateColumn(boardId);
@@ -507,8 +520,12 @@ export function BoardView({
         <TaskEditor
           key={openTaskId}
           taskId={openTaskId}
-          boardId={boardId}
           projectPrefix={projectPrefix}
+          boardName={boardName}
+          columns={columns}
+          onSaved={() => {
+            void refreshAfterSave();
+          }}
           onOpenChange={(open) => {
             if (!open) closeEditor();
           }}

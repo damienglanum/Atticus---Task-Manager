@@ -140,7 +140,13 @@ describe("typing in the task editor", () => {
   it("re-renders no card at all", async () => {
     const user = userEvent.setup();
     renderWithProviders(
-      <BoardView boardId="b1" projectId="p1" projectPrefix="TKB" projectName="Atticus" />,
+      <BoardView
+        boardId="b1"
+        projectId="p1"
+        projectPrefix="TKB"
+        projectName="Atticus"
+        boardName="Roadmap"
+      />,
     );
 
     await screen.findByText("Task 1");
@@ -174,7 +180,13 @@ describe("typing in the task editor", () => {
     // wrong reason, which is the failure mode a zero-count test invites.
     const user = userEvent.setup();
     renderWithProviders(
-      <BoardView boardId="b1" projectId="p1" projectPrefix="TKB" projectName="Atticus" />,
+      <BoardView
+        boardId="b1"
+        projectId="p1"
+        projectPrefix="TKB"
+        projectName="Atticus"
+        boardName="Roadmap"
+      />,
     );
 
     await screen.findByText("Task 1");

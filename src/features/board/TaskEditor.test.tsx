@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +17,7 @@ vi.mock("@/lib/ipc", () => ({
     subtaskUpdate: vi.fn(),
     subtaskDelete: vi.fn(),
     taskSetLabels: vi.fn(),
+    taskMove: vi.fn(),
     labelCreate: vi.fn(),
     fileRefAdd: vi.fn(),
     fileRefRelocate: vi.fn(),
@@ -57,6 +58,7 @@ const taskUpdate = vi.mocked(ipc.taskUpdate);
 const pickFile = vi.mocked(ipc.pickFile);
 const fileRefAdd = vi.mocked(ipc.fileRefAdd);
 const fileRefReveal = vi.mocked(ipc.fileRefReveal);
+const taskMove = vi.mocked(ipc.taskMove);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -64,11 +66,39 @@ beforeEach(() => {
   taskUpdate.mockImplementation((_id, _patch) => Promise.resolve(detail().task));
 });
 
-function render() {
+const COLUMNS = [
+  {
+    id: "c1",
+    boardId: "b1",
+    name: "Todo",
+    wipLimit: null,
+    position: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: "c2",
+    boardId: "b1",
+    name: "Done",
+    wipLimit: null,
+    position: 1,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+];
+
+function render(onOpenChange = vi.fn()) {
   const view = renderWithProviders(
-    <TaskEditor taskId="t1" boardId="b1" projectPrefix="TKB" onOpenChange={vi.fn()} />,
+    <TaskEditor
+      taskId="t1"
+      projectPrefix="TKB"
+      boardName="Roadmap"
+      columns={COLUMNS}
+      onSaved={vi.fn()}
+      onOpenChange={onOpenChange}
+    />,
   );
-  return { user: userEvent.setup(), ...view };
+  return { user: userEvent.setup(), onOpenChange, ...view };
 }
 
 describe("TaskEditor", () => {
@@ -76,9 +106,7 @@ describe("TaskEditor", () => {
     // `userEvent.setup()` installs its own clipboard stub, so the assertion
     // reads what actually landed there rather than spying on a replaced method.
     const { user } = render();
-    // The editor names itself after the task, not after the reference — see the
-    // note on `title` in TaskEditor. The reference is above it, and copyable.
-    await screen.findByRole("dialog", { name: "Write the release notes" });
+    await screen.findByRole("dialog", { name: "Edit task" });
 
     await user.click(screen.getByRole("button", { name: "Copy TKB-14" }));
 
@@ -88,62 +116,88 @@ describe("TaskEditor", () => {
     expect(await screen.findByText("Copied")).toBeInTheDocument();
   });
 
-  it("saves the title after typing stops, without a save button", async () => {
+  it("writes nothing until Save changes is pressed", async () => {
+    // The contract v1.1 replaced autosave with. Typing is a draft, and a draft
+    // that reached the database would make Cancel a lie.
     const { user } = render();
-    await screen.findByLabelText("Title");
+    await screen.findByLabelText("Task title");
 
-    expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Task title"), "!");
+    await user.type(screen.getByLabelText("Edit description"), " and more");
 
-    await user.type(screen.getByLabelText("Title"), "!");
+    expect(taskUpdate).not.toHaveBeenCalled();
+  });
+
+  it("writes the whole draft when Save changes is pressed", async () => {
+    const { user } = render();
+    await screen.findByLabelText("Task title");
+
+    await user.type(screen.getByLabelText("Task title"), "!");
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
 
     await waitFor(() => {
       expect(taskUpdate).toHaveBeenCalledWith("t1", { title: "Write the release notes!" });
     });
   });
 
-  it("saves a description that is still being typed when the editor closes", async () => {
-    // The case that would otherwise lose real work: close mid-sentence, before
-    // the debounce fires. Regression — the first implementation flushed in an
-    // unmount cleanup, where the mutation never reached the backend.
-    const { user } = render();
+  it("keeps Save changes unavailable until something actually changes", async () => {
+    // Otherwise every open-and-close stamps `updated_at` on a task nobody edited.
+    render();
+    await screen.findByLabelText("Task title");
+
+    expect(screen.getByRole("button", { name: /Save changes/ })).toBeDisabled();
+  });
+
+  it("asks before throwing away an edit, and writes nothing when it does", async () => {
+    const { user, onOpenChange } = render();
     await screen.findByLabelText("Edit description");
 
     await user.type(screen.getByLabelText("Edit description"), "half a thought");
-    await user.click(screen.getByRole("button", { name: "Back to the board" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    await waitFor(() => {
-      expect(taskUpdate).toHaveBeenCalledWith("t1", { description: "half a thought" });
-    });
+    // The guard that replaces autosave: closing dirty is a question, not a
+    // silent discard.
+    await screen.findByRole("alertdialog", { name: "Discard your changes?" });
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(taskUpdate).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("renders the description as markdown, not as raw text", async () => {
+  it("renders the description as markdown when previewing", async () => {
+    // The editor opens ready to type, as the design asks — the preview is one
+    // button away rather than the state you land in.
     taskDetail.mockResolvedValue(
       detail({ task: { ...detail().task, description: "# A heading" } }),
     );
 
-    render();
+    const { user } = render();
+    await user.click(await screen.findByRole("button", { name: "Preview the description" }));
 
-    // A task that already has a description opens showing it rendered, not as
-    // a textarea full of markup.
     expect(await screen.findByRole("heading", { name: "A heading" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit the description" })).toBeInTheDocument();
   });
 
   it("offers every priority level with a name", async () => {
     render();
-    await screen.findByRole("group", { name: "Priority" });
+    const field = await screen.findByLabelText("Priority");
 
     for (const level of ["None", "Low", "Medium", "High", "Urgent"]) {
-      expect(screen.getByRole("radio", { name: level })).toBeInTheDocument();
+      expect(within(field).getByRole("option", { name: level })).toBeInTheDocument();
     }
   });
 
-  it("saves a chosen priority immediately", async () => {
+  it("moves a task between columns by changing its status", async () => {
+    // Status is the column: there is no second field that could disagree with
+    // where the card actually is on the board.
     const { user } = render();
-    await screen.findByRole("radio", { name: "High" });
+    const field = await screen.findByLabelText("Status");
 
-    await user.click(screen.getByRole("radio", { name: "High" }));
-    expect(taskUpdate).toHaveBeenCalledWith("t1", { priority: 3 });
+    await user.selectOptions(field, "c2");
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
+
+    await waitFor(() => {
+      expect(taskMove).toHaveBeenCalledWith("t1", "c2", Number.MAX_SAFE_INTEGER);
+    });
   });
 
   it("clears a due date rather than sending an empty string", async () => {
@@ -153,6 +207,8 @@ describe("TaskEditor", () => {
     const field = await screen.findByLabelText("Due date");
 
     await user.clear(field);
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
+
     await waitFor(() => {
       expect(taskUpdate).toHaveBeenCalledWith("t1", { clearDueDate: true });
     });
@@ -193,8 +249,11 @@ describe("TaskEditor", () => {
 
     await user.type(field, "1h 30m");
     await user.tab();
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
 
-    expect(taskUpdate).toHaveBeenCalledWith("t1", { estimateMinutes: 90 });
+    await waitFor(() => {
+      expect(taskUpdate).toHaveBeenCalledWith("t1", { estimateMinutes: 90 });
+    });
   });
 
   it("shows a missing file's path and offers to locate it", async () => {
@@ -215,15 +274,16 @@ describe("TaskEditor", () => {
       }),
     );
 
-    render();
+    const { user } = render();
 
-    expect(await screen.findByText("Missing — this file is not there now")).toBeInTheDocument();
+    expect(await screen.findByText("This file is not where it was")).toBeInTheDocument();
+    // The remembered path is the only clue to where the file went.
     expect(screen.getByText("/Users/someone/gone.pdf")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Locate “gone.pdf”" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Actions for gone.pdf" }));
+    expect(await screen.findByRole("menuitem", { name: /Locate this file/ })).toBeInTheDocument();
     // No reveal action for a file that is not there.
-    expect(
-      screen.queryByRole("button", { name: "Show “gone.pdf” in Finder" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Reveal in Finder/ })).not.toBeInTheDocument();
   });
 
   it("links a file chosen from the system dialog", async () => {
@@ -240,8 +300,14 @@ describe("TaskEditor", () => {
     });
 
     const { user } = render();
-    await user.click(await screen.findByRole("button", { name: "Link a file" }));
+    await user.click(await screen.findByRole("button", { name: /Link files/ }));
 
+    // Staged, not written: the link is part of the draft until Save, like
+    // everything else the editor can change.
+    expect(await screen.findByText("spec.pdf")).toBeInTheDocument();
+    expect(fileRefAdd).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
     await waitFor(() => {
       expect(fileRefAdd).toHaveBeenCalledWith("t1", "/Users/someone/spec.pdf");
     });
@@ -267,7 +333,8 @@ describe("TaskEditor", () => {
     );
 
     const { user } = render();
-    await user.click(await screen.findByRole("button", { name: "Show “spec.pdf” in Finder" }));
+    await user.click(await screen.findByRole("button", { name: "Actions for spec.pdf" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Reveal in Finder/ }));
 
     expect(fileRefReveal).toHaveBeenCalledWith("f1");
   });
@@ -276,7 +343,7 @@ describe("TaskEditor", () => {
     pickFile.mockResolvedValue(null);
 
     const { user } = render();
-    await user.click(await screen.findByRole("button", { name: "Link a file" }));
+    await user.click(await screen.findByRole("button", { name: /Link files/ }));
 
     await waitFor(() => {
       expect(pickFile).toHaveBeenCalled();

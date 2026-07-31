@@ -17,6 +17,45 @@ tool, not part of the product.
 
 ---
 
+## v1.1 — The mockups as specification · 2026-07-31
+
+Second pass, after the direction was corrected: the mockups are the spec, not a
+mood board. Reviewed the same way as the entry below — real components against a
+stubbed `window.__TAURI_INTERNALS__` — which again does not exercise the webview
+or anything the OS draws.
+
+| State                                     | Result                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| Welcome screen, first run, light          | Pass — matches the mockup; footer states there is no account         |
+| Board with the new shell, light           | Pass — WORKSPACE nav, profile footer, help/bell/settings all present |
+| Dashboard, light                          | Pass — stats, overdue and due-soon panels                            |
+| Notes, light                              | Pass — list beside the editor, against the new backend               |
+| Task editor, light                        | Pass — every panel from the mockup except External Links             |
+| Task editor, dark                         | Pass — gradient card and the missing-file warning both hold          |
+
+### Checked deliberately
+
+- **Save changes starts disabled** and enables only once the draft differs. An
+  editor that could write an unchanged task would stamp `updated_at` on every
+  open-and-close.
+- **Cancel on a dirty editor asks.** This is the guard that made it safe to drop
+  autosave; without it the reversal in design-decisions.md §8 would be a straight
+  regression rather than a trade.
+- **A missing attachment shows its remembered path** as well as the warning. The
+  first build of the card replaced the path with the warning, which took away the
+  one clue to where the file went. Caught by the M6 test that still guards it.
+- **Reveal is absent for a missing file.** Also caught by an existing test: it
+  would open a Finder window on nothing.
+
+### Noted, not filed as a defect
+
+- **The Dashboard is sparse on a small workspace.** It is a summary, and a
+  summary of two boards is short. Nothing was invented to fill it.
+- **External Links is missing from the editor.** Scoped out; it is the one panel
+  in the mockups with no implementation behind it.
+
+---
+
 ## v1.1 — Visual direction revised · 2026-07-31
 
 **Reviewed in a browser, not the Tauri window.** The harness above needs a running desktop app; this

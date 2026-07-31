@@ -9,6 +9,7 @@ pub mod boards;
 pub mod database;
 pub mod detail;
 pub mod find;
+pub mod notes;
 pub mod preferences;
 pub mod projects;
 pub mod transfer;

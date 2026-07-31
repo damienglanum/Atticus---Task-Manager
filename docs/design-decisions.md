@@ -323,3 +323,64 @@ task is open. The reference sits above it, where the mockup puts its breadcrumb.
 and true overlays. Every panel, card and column in the new direction is separated by a hairline and
 a surface step. Where the dark theme cannot spend a shadow, it spends a step instead — which is why
 `--color-surface-raised` is now one step above the card rather than equal to it.
+
+## 8. v1.1 — the mockups as the specification
+
+§7 recorded a restyle: the mockups read as a visual direction, and the parts that
+depicted a different product were declined. That was the wrong reading. The
+mockups are the specification, minus the parts that require a server. This
+section records what that changed and what it cost.
+
+### Reversed from §7
+
+- **The task editor has Cancel and Save Changes**, and they do what they say.
+  Nothing typed in the editor reaches the database until Save; Cancel discards
+  the draft. This reverses US-10's no-save-button rule, which v1.0 argued for on
+  the grounds that a save button is a thing to forget. The argument was sound and
+  it lost to a stronger one: the design calls for a Cancel, and a Cancel that
+  cannot cancel is a worse lie than a Save you might forget. **The forgetting is
+  now guarded** — closing a dirty editor asks first — so the failure mode the old
+  rule avoided is covered by the guard rather than by the button's absence.
+  The draft covers the checklist and the linked files too, not only the task's own
+  columns; see `taskDraft.ts` for why that was worth the extra code.
+- **Onboarding, Dashboard, and Notes are built.** §7 called them "features, not
+  styling" and declined them. They are features, and they were the ask.
+
+### What the "minus the online part" line excludes
+
+Assignees and avatars, the member stack, Discussions, and "Last synced with
+Cloud". Also the email address under the sidebar profile: a name is a local
+preference, an email address implies an account. Everything else in the mockups
+was built, including the bell — which reports things this machine can see for
+itself, currently projects whose folder has moved.
+
+### What each new surface cost
+
+| Surface | Where it lives |
+|---|---|
+| Welcome screen | Frontend only. The name is a `ui_state` key, not a schema change |
+| Dashboard, My Projects | Frontend only, derived from board snapshots already loaded |
+| Notes | **Schema 2** — a table, an FTS index, four commands, export coverage |
+| Editor furniture | Frontend: markdown toolbar, checklist badge, Status select, tag chips |
+
+### Notes, and the export version
+
+Adding a table means adding a collection to the export document, which means
+`CURRENT_EXPORT_VERSION` is now **2**. ADR-0006's chain gained its first real
+arm, `v1_to_v2`, and `tests/fixtures/exports/v2.json` is checked in beside
+`v1.json` — the guard that demands one per released version failed until it was,
+which is the guard working.
+
+A note is deliberately **not a task without a column**. It has no status, no
+board position and nothing to drag; giving it those would mean every board query
+filtering them out forever after.
+
+### Three places the design was not followed exactly, and why
+
+- **"Upload files" is "Link files".** ADR-0007 records the path and never copies
+  the file. A control labelled Upload would promise a copy that does not exist,
+  and the promise fails much later — when the original moves.
+- **The primary buttons are a deeper cyan than the swatch.** Unchanged from §7,
+  and measured: the brighter fill carrying a white label is about 2.8:1.
+- **`EXTERNAL LINKS` is not built.** The one panel from the editor mockup that is
+  missing. It needs its own table and commands, and was scoped out.

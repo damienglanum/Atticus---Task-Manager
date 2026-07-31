@@ -1,9 +1,17 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
-import { ChevronRight, LayoutGrid, Search } from "lucide-react";
+import { Bell, ChevronRight, CircleHelp, LayoutGrid, Search, Settings } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { IconButton } from "@/components/ui/Button";
 import { Toaster } from "@/components/ui/Toaster";
+import { HelpDialog } from "@/features/settings/HelpDialog";
+import { NotesView } from "@/features/notes/NotesView";
+import { NameDialog } from "@/features/profile/NameDialog";
+import { useProfileName, useSetProfileName } from "@/features/profile/queries";
+import { WelcomeScreen } from "@/features/profile/WelcomeScreen";
+import { DashboardView, ProjectsView } from "@/features/workspace/DashboardView";
+import type { WorkspaceView } from "@/features/projects/ProjectSidebar";
 import { BoardNameDialog } from "@/features/boards/BoardNameDialog";
 import { BoardTabs } from "@/features/boards/BoardTabs";
 import {
@@ -86,8 +94,14 @@ export function App() {
   const [boardDialog, setBoardDialog] = useState<BoardDialogState>({ mode: "closed" });
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [requestedTaskId, setRequestedTaskId] = useState<string | null>(null);
+  const [renamingProfile, setRenamingProfile] = useState(false);
+  const [view, setView] = useState<WorkspaceView>("board");
+
+  const profileName = useProfileName();
+  const setProfileName = useSetProfileName();
 
   const undo = useUndoAcrossApp();
 
@@ -128,6 +142,9 @@ export function App() {
 
   const selectedProject = active.find((project) => project.id === selectedProjectId) ?? null;
 
+  /** What the bell reports: local signals only, nothing pushed from anywhere. */
+  const attentionCount = active.filter((project) => project.directoryMissing).length;
+
   // Startup failed entirely — the database could not be opened. This is the one
   // case where the recovery screen replaces the whole interface.
   const startupError = workspace.error ?? preferences.error;
@@ -135,12 +152,35 @@ export function App() {
     return <RecoveryScreen error={toAppError(startupError)} />;
   }
 
+  // First run. Rendered before the shell rather than over it: the workspace
+  // behind a welcome screen belongs to nobody yet, and showing it for a frame
+  // and then covering it is worse than waiting for one query.
+  if (profileName.isSuccess && profileName.data === null) {
+    return (
+      <>
+        <WelcomeScreen
+          pending={setProfileName.isPending}
+          onSubmit={(name) => {
+            setProfileName.mutate(name, {
+              onError: (error: unknown) => {
+                notifyError(`Your name could not be saved. ${describeAppError(toAppError(error))}`);
+              },
+            });
+          }}
+        />
+        <Toaster />
+      </>
+    );
+  }
+
   const openBoard = (board: Board) => {
     setWorkspace.mutate({ projectId: board.projectId, boardId: board.id });
+    setView("board");
   };
 
   const openProject = (project: Project) => {
     setWorkspace.mutate({ projectId: project.id, boardId: null });
+    setView("board");
   };
 
   const submitProject = async (values: ProjectFormValues) => {
@@ -186,6 +226,12 @@ export function App() {
         active={active}
         archived={archived}
         selectedId={selectedProjectId}
+        view={view}
+        onNavigate={setView}
+        profileName={profileName.data ?? ""}
+        onRenameProfile={() => {
+          setRenamingProfile(true);
+        }}
         onSelect={openProject}
         onCreate={() => {
           setProjectDialog({ mode: "create" });
@@ -211,13 +257,48 @@ export function App() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="border-border-subtle flex h-14 shrink-0 items-center justify-between gap-4 border-b px-5">
-          <Breadcrumb projectName={selectedProject?.name ?? null} />
-
-          <SearchField
-            onOpen={() => {
-              setPaletteOpen(true);
+          <Breadcrumb
+            projectName={selectedProject?.name ?? null}
+            view={view}
+            onHome={() => {
+              setView("projects");
             }}
           />
+
+          <div className="flex shrink-0 items-center gap-2">
+            <SearchField
+              onOpen={() => {
+                setPaletteOpen(true);
+              }}
+            />
+
+            <IconButton
+              label="Keyboard shortcuts and help"
+              className="size-9"
+              onClick={() => {
+                setHelpOpen(true);
+              }}
+            >
+              <CircleHelp size={16} aria-hidden />
+            </IconButton>
+
+            <AttentionBell
+              count={attentionCount}
+              onOpen={() => {
+                setView("dashboard");
+              }}
+            />
+
+            <IconButton
+              label="Settings"
+              className="size-9"
+              onClick={() => {
+                setSettingsOpen(true);
+              }}
+            >
+              <Settings size={16} aria-hidden />
+            </IconButton>
+          </div>
         </header>
 
         <main className="min-h-0 flex-1">
@@ -225,6 +306,21 @@ export function App() {
             <p role="status" className="text-fg-secondary p-6 text-sm">
               Opening your workspace…
             </p>
+          ) : view === "dashboard" ? (
+            <DashboardView
+              projects={active}
+              boards={boards.data ?? []}
+              greeting={greeting(profileName.data ?? "")}
+              onOpenTask={(task) => {
+                setWorkspace.mutate({ projectId: task.projectId, boardId: task.boardId });
+                setRequestedTaskId(task.id);
+                setView("board");
+              }}
+            />
+          ) : view === "projects" ? (
+            <ProjectsView projects={active} onOpen={openProject} />
+          ) : view === "notes" ? (
+            <NotesView projectId={selectedProjectId} projectName={selectedProject?.name ?? null} />
           ) : selectedProject === null ? (
             <NoProjectYet />
           ) : selectedBoardId === null ? (
@@ -237,6 +333,9 @@ export function App() {
               projectId={selectedProject.id}
               projectPrefix={selectedProject.keyPrefix}
               projectName={selectedProject.name}
+              boardName={
+                boards.data?.find((board) => board.id === selectedBoardId)?.name ?? "Board"
+              }
               openTaskId={requestedTaskId}
               tabs={
                 boards.data !== undefined && boards.data.length > 0 ? (
@@ -364,29 +463,113 @@ export function App() {
         }}
       />
 
+      <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+
+      {renamingProfile ? (
+        <NameDialog
+          open
+          onOpenChange={setRenamingProfile}
+          initialName={profileName.data ?? ""}
+          pending={setProfileName.isPending}
+          onSubmit={(name) => {
+            setProfileName.mutate(name, {
+              onSuccess: () => {
+                setRenamingProfile(false);
+              },
+              onError: (error: unknown) => {
+                notifyError(`Your name could not be saved. ${describeAppError(toAppError(error))}`);
+              },
+            });
+          }}
+        />
+      ) : null}
+
       <Toaster />
     </div>
   );
 }
 
-/** Where you are, in one line: the sidebar's list, then the open project. */
-function Breadcrumb({ projectName }: { projectName: string | null }) {
+/** Where you are, in one line: the sidebar's list, then whatever is open. */
+function Breadcrumb({
+  projectName,
+  view,
+  onHome,
+}: {
+  projectName: string | null;
+  view: WorkspaceView;
+  onHome: () => void;
+}) {
+  const leaf =
+    view === "dashboard"
+      ? "Dashboard"
+      : view === "notes"
+        ? projectName === null
+          ? "Notes"
+          : `${projectName} · Notes`
+        : view === "projects"
+          ? null
+          : projectName;
+
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">
       <ol className="text-fg-secondary flex items-center gap-2 text-sm">
-        <li className="flex shrink-0 items-center gap-2">
-          <LayoutGrid size={14} aria-hidden />
-          Projects
+        <li className="shrink-0">
+          <button
+            type="button"
+            onClick={onHome}
+            className="hover:text-fg-primary flex cursor-default items-center gap-2"
+          >
+            <LayoutGrid size={14} aria-hidden />
+            Projects
+          </button>
         </li>
-        {projectName === null ? null : (
+        {leaf === null ? null : (
           <li className="flex min-w-0 items-center gap-2">
             <ChevronRight size={14} aria-hidden className="text-fg-secondary shrink-0" />
-            <span className="text-fg-primary truncate font-medium">{projectName}</span>
+            <span className="text-fg-primary truncate font-medium">{leaf}</span>
           </li>
         )}
       </ol>
     </nav>
   );
+}
+
+/**
+ * The bell.
+ *
+ * It reports things this machine can see for itself — right now, projects whose
+ * folder has moved. Nothing is pushed to it, because there is nothing to push
+ * from. A bell that could never ring would be furniture, so it is only marked
+ * when it has something to say, and it says how many.
+ */
+function AttentionBell({ count, onOpen }: { count: number; onOpen: () => void }) {
+  return (
+    <IconButton
+      label={
+        count === 0
+          ? "Nothing needs attention"
+          : `${String(count)} ${count === 1 ? "thing needs" : "things need"} attention`
+      }
+      className="relative size-9"
+      onClick={onOpen}
+    >
+      <Bell size={16} aria-hidden />
+      {count === 0 ? null : (
+        <span
+          aria-hidden
+          className="bg-danger-solid absolute top-1.5 right-1.5 size-2 rounded-full"
+        />
+      )}
+    </IconButton>
+  );
+}
+
+/** The dashboard's heading. Uses the name because that is what it was asked for. */
+function greeting(name: string): string {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const first = name.trim().split(/\s+/)[0] ?? "";
+  return first === "" ? part : `${part}, ${first}`;
 }
 
 /**

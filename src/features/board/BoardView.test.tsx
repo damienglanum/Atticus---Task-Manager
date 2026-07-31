@@ -14,7 +14,13 @@ import { BoardView } from "./BoardView";
 function renderBoard() {
   return renderWithProviders(
     <>
-      <BoardView boardId="b1" projectId="p1" projectPrefix="TKB" projectName="Atticus" />
+      <BoardView
+        boardId="b1"
+        projectId="p1"
+        projectPrefix="TKB"
+        projectName="Atticus"
+        boardName="Roadmap"
+      />
       <Toaster />
     </>,
   );

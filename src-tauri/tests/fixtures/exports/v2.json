@@ -1,0 +1,146 @@
+{
+  "exportVersion": 2,
+  "generatedAt": "2026-07-30T09:41:12.000Z",
+  "app": "atticus",
+  "appVersion": "0.1.0",
+  "data": {
+    "projects": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000001",
+        "name": "Fixture",
+        "description": "Pinned so version 1 stays readable forever.",
+        "color": "indigo",
+        "keyPrefix": "FIX",
+        "nextTaskNumber": 3,
+        "directoryPath": null,
+        "position": 0,
+        "archivedAt": null,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      }
+    ],
+    "boards": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000002",
+        "projectId": "019fb000-0000-7000-8000-000000000001",
+        "name": "Board",
+        "position": 0,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      }
+    ],
+    "columns": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000003",
+        "boardId": "019fb000-0000-7000-8000-000000000002",
+        "name": "Todo",
+        "wipLimit": null,
+        "position": 0,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      },
+      {
+        "id": "019fb000-0000-7000-8000-000000000004",
+        "boardId": "019fb000-0000-7000-8000-000000000002",
+        "name": "Done",
+        "wipLimit": 2,
+        "position": 1,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      }
+    ],
+    "tasks": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000005",
+        "projectId": "019fb000-0000-7000-8000-000000000001",
+        "boardId": "019fb000-0000-7000-8000-000000000002",
+        "columnId": "019fb000-0000-7000-8000-000000000003",
+        "number": 1,
+        "title": "A task with everything set",
+        "description": "With **markdown** in it.",
+        "priority": 3,
+        "dueDate": "2026-08-14",
+        "estimateMinutes": 90,
+        "position": 0,
+        "archivedAt": null,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      },
+      {
+        "id": "019fb000-0000-7000-8000-000000000006",
+        "projectId": "019fb000-0000-7000-8000-000000000001",
+        "boardId": "019fb000-0000-7000-8000-000000000002",
+        "columnId": "019fb000-0000-7000-8000-000000000004",
+        "number": 2,
+        "title": "An archived task, which an export must not drop",
+        "description": "",
+        "priority": 0,
+        "dueDate": null,
+        "estimateMinutes": null,
+        "position": 0,
+        "archivedAt": 1753822500000,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822500000
+      }
+    ],
+    "subtasks": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000007",
+        "taskId": "019fb000-0000-7000-8000-000000000005",
+        "title": "A finished subtask",
+        "done": true,
+        "position": 0,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      }
+    ],
+    "labels": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000008",
+        "projectId": "019fb000-0000-7000-8000-000000000001",
+        "name": "api",
+        "color": "blue",
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      }
+    ],
+    "taskLabels": [
+      {
+        "taskId": "019fb000-0000-7000-8000-000000000005",
+        "labelId": "019fb000-0000-7000-8000-000000000008"
+      }
+    ],
+    "fileRefs": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000009",
+        "taskId": "019fb000-0000-7000-8000-000000000005",
+        "path": "/Users/someone/notes/design.md",
+        "displayName": "design.md",
+        "position": 0,
+        "createdAt": 1753822000000
+      }
+    ],
+    "savedFilters": [
+      {
+        "id": "019fb000-0000-7000-8000-00000000000a",
+        "projectId": "019fb000-0000-7000-8000-000000000001",
+        "name": "High priority",
+        "filter": "{\"priorities\":[3,4]}",
+        "position": 0,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      }
+    ],
+    "notes": [
+      {
+        "id": "019fb000-0000-7000-8000-000000000091",
+        "projectId": "019fb000-0000-7000-8000-000000000001",
+        "title": "Pinned so version 2 stays readable forever.",
+        "body": "Notes arrived with export version 2.\n\nThis fixture is what proves a v2 file written today can still be read by a build shipped later; ADR-0006 keeps one for every released version, forever.",
+        "position": 0,
+        "createdAt": 1753822000000,
+        "updatedAt": 1753822000000
+      }
+    ]
+  }
+}

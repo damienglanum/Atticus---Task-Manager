@@ -16,7 +16,7 @@ use ts_rs::TS;
 use crate::error::{AppError, AppResult};
 
 /// The shape this build writes, and the highest it can read.
-pub const CURRENT_EXPORT_VERSION: u32 = 1;
+pub const CURRENT_EXPORT_VERSION: u32 = 2;
 
 /// The application name written into the envelope, so a file that is obviously
 /// from somewhere else can be rejected by looking rather than by parsing.
@@ -57,6 +57,8 @@ pub struct ExportData {
     pub file_refs: Vec<ExportFileRef>,
     #[serde(default)]
     pub saved_filters: Vec<ExportSavedFilter>,
+    #[serde(default)]
+    pub notes: Vec<ExportNote>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -213,6 +215,23 @@ pub struct ExportSavedFilter {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "ExportNote.ts")]
+pub struct ExportNote {
+    pub id: String,
+    pub project_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+    #[ts(type = "number")]
+    pub position: i64,
+    #[ts(type = "number")]
+    pub created_at: i64,
+    #[ts(type = "number")]
+    pub updated_at: i64,
+}
+
 /// Brings any readable document up to `CURRENT_EXPORT_VERSION`.
 ///
 /// Refuses a newer version by number rather than trying to read it: a document
@@ -245,7 +264,8 @@ pub fn upgrade(document: serde_json::Value) -> AppResult<ExportDocument> {
     // only one released shape so far; the `match` is the shape the second one
     // slots into rather than a rewrite.
     let current = match version {
-        1 => document,
+        1 => v1_to_v2(document),
+        2 => document,
         other => {
             return Err(AppError::validation(
                 "exportVersion",
@@ -258,6 +278,26 @@ pub fn upgrade(document: serde_json::Value) -> AppResult<ExportDocument> {
         field: "data".into(),
         message: format!("This file is not shaped like an Atticus export: {error}"),
     })
+}
+
+/// v1 → v2: notes did not exist.
+///
+/// `ExportData` defaults every collection, so deserialising a v1 document would
+/// already have produced an empty `notes`. This arm exists anyway, and writes
+/// the empty list explicitly, because the chain's value is that every released
+/// shape has a named step: the next migration that is *not* a no-op has
+/// somewhere obvious to go, and a reader can see that v1 files were considered
+/// rather than merely happening to work.
+fn v1_to_v2(mut document: serde_json::Value) -> serde_json::Value {
+    if let Some(data) = document
+        .get_mut("data")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        data.entry("notes")
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    }
+    document["exportVersion"] = serde_json::json!(CURRENT_EXPORT_VERSION);
+    document
 }
 
 #[cfg(test)]

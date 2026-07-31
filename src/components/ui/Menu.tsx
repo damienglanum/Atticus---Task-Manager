@@ -14,15 +14,19 @@ import { cn } from "@/lib/cn";
 export function MenuContent({
   children,
   align = "end",
+  side = "bottom",
   className,
 }: {
   children: ReactNode;
   align?: "start" | "center" | "end";
+  /** Opens upward for a trigger that sits at the bottom of the window. */
+  side?: "top" | "right" | "bottom" | "left";
   className?: string;
 }) {
   return (
     <DropdownMenu.Content
       align={align}
+      side={side}
       sideOffset={4}
       style={{ zIndex: "var(--z-dropdown)" }}
       className={cn(

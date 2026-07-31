@@ -14,6 +14,7 @@ pub mod file_refs;
 pub mod import;
 pub mod labels;
 pub mod migrations;
+pub mod notes;
 pub mod ordering;
 pub mod projects;
 pub mod saved_filters;
@@ -445,33 +446,47 @@ mod tests {
     // moment in this application's life, so it gets tested against a real file
     // on disk, not an in-memory database.
 
-    const M1: migrations::Migration = migrations::Migration {
-        version: 1,
-        description: "initial schema",
-        sql: include_str!("schema/m0001_initial.sql"),
-    };
+    /// The released list, plus one more. The synthetic migration sits *after*
+    /// the last real one rather than at a fixed 2, so releasing another
+    /// migration moves these tests forward instead of breaking them.
+    fn next_version() -> u32 {
+        migrations::latest_version(migrations::MIGRATIONS) + 1
+    }
 
-    const UPGRADE_OK: &[migrations::Migration] = &[
-        M1,
-        migrations::Migration {
-            version: 2,
+    fn released_plus(extra: migrations::Migration) -> Vec<migrations::Migration> {
+        let mut list = Vec::from(migrations::MIGRATIONS);
+        list.push(extra);
+        list
+    }
+
+    fn upgrade_ok() -> Vec<migrations::Migration> {
+        released_plus(migrations::Migration {
+            version: next_version(),
             description: "adds a table",
             sql: "CREATE TABLE later_addition (id TEXT PRIMARY KEY);",
-        },
-    ];
+        })
+    }
 
-    const UPGRADE_BROKEN: &[migrations::Migration] = &[
-        M1,
-        migrations::Migration {
-            version: 2,
+    fn upgrade_broken() -> Vec<migrations::Migration> {
+        released_plus(migrations::Migration {
+            version: next_version(),
             description: "deliberately invalid",
             sql: "CREATE TABLE half_written (id TEXT PRIMARY KEY);
                   INSERT INTO not_a_table VALUES (1);",
-        },
-    ];
+        })
+    }
 
-    fn open_at_v1_with_data(path: &std::path::Path) {
-        let db = Database::open(path).expect("database opens at v1");
+    /// The label a pre-migration backup carries: the version it was taken *at*,
+    /// which is the last released one.
+    fn released_backup_prefix() -> String {
+        format!(
+            "pre-migration-{}-",
+            migrations::latest_version(migrations::MIGRATIONS)
+        )
+    }
+
+    fn open_at_released_with_data(path: &std::path::Path) {
+        let db = Database::open(path).expect("database opens at the released schema");
         db.connection()
             .execute(
                 "INSERT INTO projects (id, name, color, key_prefix, position, created_at, updated_at) \
@@ -503,9 +518,9 @@ mod tests {
     fn upgrading_an_existing_database_takes_a_backup_first() {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join(DATABASE_FILE_NAME);
-        open_at_v1_with_data(&path);
+        open_at_released_with_data(&path);
 
-        let upgraded = Database::open_with(&path, UPGRADE_OK).expect("upgrade should succeed");
+        let upgraded = Database::open_with(&path, &upgrade_ok()).expect("upgrade should succeed");
 
         let backups = backups_in(dir.path());
         assert_eq!(
@@ -513,10 +528,11 @@ mod tests {
             1,
             "exactly one pre-migration backup should exist"
         );
+        let prefix = released_backup_prefix();
         assert!(
             backups[0]
                 .file_name()
-                .is_some_and(|name| name.to_string_lossy().starts_with("pre-migration-1-")),
+                .is_some_and(|name| name.to_string_lossy().starts_with(&prefix)),
             "the backup should be named for the version it was taken at: {backups:?}",
         );
 
@@ -531,7 +547,8 @@ mod tests {
         let snapshot = Connection::open(&backups[0]).expect("snapshot opens");
         let snapshot_version = migrations::current_version(&snapshot).expect("version reads");
         assert_eq!(
-            snapshot_version, 1,
+            snapshot_version,
+            migrations::latest_version(migrations::MIGRATIONS),
             "the backup should predate the migration"
         );
     }
@@ -540,10 +557,10 @@ mod tests {
     fn a_failing_upgrade_preserves_the_data_and_names_the_backup() {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join(DATABASE_FILE_NAME);
-        open_at_v1_with_data(&path);
+        open_at_released_with_data(&path);
 
-        let error =
-            Database::open_with(&path, UPGRADE_BROKEN).expect_err("migration 2 should fail");
+        let error = Database::open_with(&path, &upgrade_broken())
+            .expect_err("the invalid migration should fail");
 
         let AppError::Migration { backup_path, .. } = error else {
             panic!("expected a Migration error, got {error:?}");
@@ -558,7 +575,7 @@ mod tests {
         let reopened = Database::open(&path).expect("the original database still opens");
         assert_eq!(
             migrations::current_version(reopened.connection()).expect("version reads"),
-            1,
+            migrations::latest_version(migrations::MIGRATIONS),
             "a failed migration must not advance the version",
         );
         assert!(
@@ -581,15 +598,16 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join(DATABASE_FILE_NAME);
         {
-            let db = Database::open_with(&path, UPGRADE_OK).expect("opens at v2");
+            let db = Database::open_with(&path, &upgrade_ok()).expect("opens one past released");
             assert_eq!(
                 migrations::current_version(db.connection()).expect("reads"),
-                2
+                next_version()
             );
         }
 
-        // Now open the same file with a build that only knows migration 1.
-        let error = Database::open_with(&path, &[M1]).expect_err("should refuse the newer file");
+        // Now open the same file with a build that knows only what is released.
+        let error = Database::open_with(&path, migrations::MIGRATIONS)
+            .expect_err("should refuse the newer file");
 
         assert!(matches!(error, AppError::Migration { .. }));
         assert!(
