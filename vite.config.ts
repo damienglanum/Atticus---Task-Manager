@@ -23,6 +23,15 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
+    rollupOptions: {
+      // Two entries. The splash is its own window with its own document, and it
+      // has to be able to paint before the application bundle exists — sharing
+      // an entry with the app would mean waiting for React to arrive first.
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        splash: fileURLToPath(new URL("./splash.html", import.meta.url)),
+      },
+    },
   },
   test: {
     environment: "jsdom",

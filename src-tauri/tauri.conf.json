@@ -12,6 +12,19 @@
   "app": {
     "windows": [
       {
+        "label": "splash",
+        "url": "splash.html",
+        "title": "Atticus",
+        "width": 720,
+        "height": 320,
+        "resizable": false,
+        "decorations": false,
+        "center": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
+      },
+      {
         "label": "main",
         "title": "Atticus - Task Manager",
         "width": 1440,
@@ -19,7 +32,8 @@
         "minWidth": 900,
         "minHeight": 600,
         "resizable": true,
-        "titleBarStyle": "Visible"
+        "titleBarStyle": "Visible",
+        "visible": false
       }
     ],
     "security": {

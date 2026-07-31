@@ -17,6 +17,41 @@ tool, not part of the product.
 
 ---
 
+## v1.1 — Mark and splash · 2026-07-31
+
+Reviewed in a browser, as with the two entries below. The splash was reviewed at
+the window's real size (720 × 320); the mark on a purpose-built size ladder —
+16, 20, 26, 32, 48, 64, 120 px — against both themes at once.
+
+| State                                    | Result                                                         |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| Splash at 720 × 320                      | Pass — matches the supplied `preview.png`                       |
+| Mark ladder, light                       | Pass, after two fixes below                                     |
+| Mark ladder, dark                        | Pass                                                            |
+
+### Changed on review
+
+- **V1.1-2 — The small mark was a speck.** Dropping the outer contours while
+  keeping the 360 × 360 canvas left three small rings adrift in an empty box. At
+  26 px, the sidebar size, the mark occupied about a quarter of its own footprint.
+  Fixed by computing a square viewBox per ring count.
+- **V1.1-3 — The large mark was paler than the small one.** The artwork's 2.2
+  stroke is a viewBox unit, so at 64 px it rendered 0.4 px while the 48 px mark
+  beside it rendered 1.5. Visible immediately on the ladder, and invisible if the
+  sizes had been looked at one at a time. Fixed by specifying the stroke as a
+  rendered thickness.
+
+### Not verified here, and it matters
+
+**The splash has not been seen in the real Tauri window.** Everything above is
+the same HTML in a browser at the same size. What is untested is the part only a
+launch can exercise: whether the splash paints before the main window would have,
+whether closing it in front of a shown main window avoids a flash of the desktop,
+and how the handshake behaves on a genuinely cold start. That needs a run of
+`npm run tauri dev` and a look at the screen.
+
+---
+
 ## v1.1 — The mockups as specification · 2026-07-31
 
 Second pass, after the direction was corrected: the mockups are the spec, not a

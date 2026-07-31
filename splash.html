@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atticus</title>
+    <style>
+      /* Inline, and the only styles this window has. A splash that waits for a
+         stylesheet to arrive over the wire can flash unstyled, which is exactly
+         the moment it exists to cover. */
+      :root {
+        --splash-background: #0b0c0d;
+        --splash-stroke: #dedede;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--splash-background);
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        /* A window with no chrome should not look like a web page: no text
+           selection, no caret, no rubber-banding. */
+        user-select: none;
+        cursor: default;
+        overscroll-behavior: none;
+      }
+
+      #splash {
+        width: 66vmin;
+        height: 66vmin;
+      }
+
+      #splash svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      #splash path {
+        opacity: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="splash"></div>
+    <script type="module" src="/src/splash/main.ts"></script>
+  </body>
+</html>

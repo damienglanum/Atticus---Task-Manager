@@ -103,6 +103,19 @@ export function App() {
   const profileName = useProfileName();
   const setProfileName = useSetProfileName();
 
+  /**
+   * Dismisses the splash window once there is something worth showing.
+   *
+   * "Ready" is the two queries the shell cannot render without, *settled* rather
+   * than successful: a database that failed to open still has a recovery screen
+   * to show, and leaving somebody on a splash screen because their data is in
+   * trouble is the worst possible moment to do it.
+   */
+  const shellSettled = !workspace.isPending && !preferences.isPending;
+  useEffect(() => {
+    if (shellSettled) void ipc.appReady();
+  }, [shellSettled]);
+
   const undo = useUndoAcrossApp();
 
   useShortcuts(

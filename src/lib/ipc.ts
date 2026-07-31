@@ -197,6 +197,13 @@ export const ipc = {
   /** Returns where the database that was replaced has been saved. */
   backupRestore: (path: string) => call<string>("backup_restore", { path }),
 
+  /**
+   * Tells the backend the interface is ready to be looked at, so the splash
+   * window can go. Never rejects into the UI: a splash that fails to close is
+   * bad, and an error toast on top of one is worse.
+   */
+  appReady: () => call<null>("app_ready").catch(() => null),
+
   notesList: (projectId: string) => call<Note[]>("notes_list", { projectId }),
   noteCreate: (projectId: string, title: string) => call<Note>("note_create", { projectId, title }),
   noteUpdate: (id: string, patch: NotePatch) => call<Note>("note_update", { id, patch }),

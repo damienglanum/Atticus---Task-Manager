@@ -384,3 +384,68 @@ filtering them out forever after.
   and measured: the brighter fill carrying a white label is about 2.8:1.
 - **`EXTERNAL LINKS` is not built.** The one panel from the editor mockup that is
   missing. It needs its own table and commands, and was scoped out.
+
+## 9. The mark, and the splash
+
+Both come from a supplied asset: eight topographic contours drawn from the
+centre outward, over 5.067 seconds, in `#dedede` on black.
+
+### The mark
+
+The v1.1 mark was a cyan tile with a check glyph inside it. This replaces it with
+the contour map, drawn in line rather than filled. Linework has no inside, so it
+takes `currentColor` from whatever it sits in and needs no separate contrast
+argument for a glyph — the tile did.
+
+**It sheds rings as it shrinks.** Eight contours inside a 26 px sidebar mark is
+one ring every 1.6 px, which is a smudge. Below 28 px it draws three; below
+56 px, five; above that, all eight.
+
+Two things had to be got right for that to work, and the first attempt got both
+wrong:
+
+- **The frame shrinks with the artwork.** Slicing the outer rings off while
+  keeping the 360 × 360 canvas leaves the survivors in the middle of a mostly
+  empty box. Rendered at 26 px it was a speck with a wide margin. `VIEW_BOXES`
+  in `logoContours.ts` holds a computed square box per ring count.
+- **The stroke is specified in rendered pixels, not viewBox units.** The source
+  art's 2.2 units is right at 360 px and renders 0.4 px at 64 px — which made
+  the *full* mark paler than the reduced one above it in the size ladder.
+  `targetStroke` converts a target thickness back into viewBox units.
+
+Geometry lives in `src/components/ui/logoContours.ts` and is read by both the
+in-app logo and the splash window. One copy: eight path strings of that length,
+duplicated, would drift the first time one was nudged.
+
+### The splash
+
+A real second Tauri window, not a React screen inside the app. By the time React
+can paint, the slow part of a cold launch is over; a splash that appears then is
+just a delay. `splash.html` is a second Vite entry with inline CSS and no
+framework — about 30 kB of JavaScript, against the app bundle's 745 kB.
+
+**The animation is compressed from 5.067 s to 1.5 s, and does not gate anything.**
+Five seconds is a title sequence. Milestone 10 measures cold-launch-to-board as a
+release gate, and holding the user for the animation's sake would mean measuring
+a decision rather than the application. Two signals — `splash_animation_finished`
+from the splash, `app_ready` from the shell — and whichever arrives second closes
+the window. A warm start is not padded; a cold one is not cut off mid-stroke.
+
+The main window is created with `visible: false` and shown by the same handshake.
+Without that, the OS draws an empty white frame beside the splash for the whole
+boot.
+
+**`app_ready` fires when the shell's two queries have *settled*, not succeeded.**
+A database that failed to open still has a recovery screen to show, and leaving
+somebody on a splash because their data is in trouble would be the worst possible
+moment for it.
+
+Under the `e2e-webdriver` feature the splash is closed in `setup` and the main
+window shown immediately: the harness pins `main` by label and drives it, and a
+launch experience is not what those specs are testing.
+
+### Still on the old mark
+
+The bundle icons in `src-tauri/icons/` are the pre-v1.1 artwork. The dock icon
+and the in-app mark therefore disagree. Regenerating them needs a rasteriser this
+repository does not carry; it is a real loose end, not a decision.

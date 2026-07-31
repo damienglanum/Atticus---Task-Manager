@@ -12,4 +12,5 @@ pub mod find;
 pub mod notes;
 pub mod preferences;
 pub mod projects;
+pub mod splash;
 pub mod transfer;

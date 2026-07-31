@@ -45,6 +45,23 @@ pub fn run() {
                 }
             };
             app.manage(state);
+            app.manage(crate::commands::splash::SplashState::default());
+
+            // The end-to-end harness pins the `main` window by label and drives
+            // it directly. A second window that is briefly in front of it, and a
+            // main window that starts hidden, are a launch experience rather
+            // than behaviour under test — so under the harness the splash is
+            // dismissed before the first spec can see it.
+            #[cfg(feature = "e2e-webdriver")]
+            {
+                if let Some(splash) = app.get_webview_window("splash") {
+                    let _ = splash.close();
+                }
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            }
 
             // Sized here rather than in `tauri.conf.json`. A fixed size leaves
             // a wide display mostly empty and forces the board to scroll; the
@@ -117,6 +134,8 @@ pub fn run() {
             commands::detail::file_ref_remove,
             commands::detail::file_refs_verify,
             commands::detail::file_ref_reveal,
+            commands::splash::splash_animation_finished,
+            commands::splash::app_ready,
             commands::notes::notes_list,
             commands::notes::note_create,
             commands::notes::note_update,
