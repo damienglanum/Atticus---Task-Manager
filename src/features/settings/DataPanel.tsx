@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, RotateCcw, Upload } from "lucide-react";
 import { useState } from "react";
 
 import { notify, notifyError } from "@/app/toast";
@@ -114,112 +115,132 @@ export function DataPanel({ projects, onDataReplaced }: DataPanelProps) {
   });
 
   return (
-    <section aria-labelledby="data-heading" className="space-y-4">
-      <h3
-        id="data-heading"
-        className="text-fg-secondary text-xs font-semibold tracking-[0.06em] uppercase"
-      >
-        Export and import
-      </h3>
+    <section aria-label="Export, import and backups" className="space-y-4">
+      <section aria-labelledby="data-heading" className="border-border-subtle border-y px-1 py-4">
+        <h3 id="data-heading" className="text-fg-primary text-sm font-semibold">
+          Export and import
+        </h3>
+        <p className="text-fg-secondary mt-1 text-xs">
+          Move a complete workspace or one project between Atticus installations.
+        </p>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-fg-secondary text-2xs">What to export</span>
-          <select
-            value={scope}
-            onChange={(event) => {
-              setScope(event.target.value);
+        <div className="mt-4 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-fg-secondary text-2xs font-medium">What to export</span>
+            <select
+              value={scope}
+              onChange={(event) => {
+                setScope(event.target.value);
+              }}
+              className="border-border-strong bg-surface-raised text-fg-primary h-9 min-w-36 rounded-lg border px-2.5 text-xs"
+            >
+              <option value="everything">Everything</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <Button
+            onClick={() => {
+              exporting.mutate();
             }}
-            className="border-border-strong bg-surface-raised text-fg-primary h-8 rounded-md border px-2 text-xs"
+            disabled={exporting.isPending}
           >
-            <option value="everything">Everything</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            <Download size={13} aria-hidden />
+            {exporting.isPending ? "Exporting…" : "Export…"}
+          </Button>
 
-        <Button
-          onClick={() => {
-            exporting.mutate();
-          }}
-          disabled={exporting.isPending}
-        >
-          {exporting.isPending ? "Exporting…" : "Export…"}
-        </Button>
+          <Button
+            onClick={() => {
+              preview.mutate();
+            }}
+            disabled={preview.isPending}
+          >
+            <Upload size={13} aria-hidden />
+            {preview.isPending ? "Reading…" : "Import…"}
+          </Button>
+        </div>
 
-        <Button
-          onClick={() => {
-            preview.mutate();
-          }}
-          disabled={preview.isPending}
-        >
-          {preview.isPending ? "Reading…" : "Import…"}
-        </Button>
-      </div>
+        <p className="text-fg-secondary mt-3 text-2xs">
+          Exports are JSON and include archived items. File references travel as paths, not
+          contents, so moved files may need to be linked again.
+        </p>
 
-      <p className="text-fg-secondary text-2xs">
-        Exports are JSON and include archived items. File references travel as paths, not contents,
-        so a file imported on another machine will show as missing until you point at it again.
-      </p>
+        {issues.length > 0 ? (
+          <div className="mt-4">
+            <IssueList issues={issues} />
+          </div>
+        ) : null}
 
-      {issues.length > 0 ? <IssueList issues={issues} /> : null}
+        {pending !== null ? (
+          <div className="mt-4">
+            <ImportChoice
+              plan={pending.plan}
+              busy={applying.isPending}
+              onCancel={() => {
+                setPending(null);
+              }}
+              onChoose={(mode) => {
+                applying.mutate({ path: pending.path, mode });
+              }}
+            />
+          </div>
+        ) : null}
+      </section>
 
-      {pending !== null ? (
-        <ImportChoice
-          plan={pending.plan}
-          busy={applying.isPending}
-          onCancel={() => {
-            setPending(null);
-          }}
-          onChoose={(mode) => {
-            applying.mutate({ path: pending.path, mode });
-          }}
-        />
-      ) : null}
-
-      <h3
-        id="backups-heading"
-        className="text-fg-secondary text-xs font-semibold tracking-[0.06em] uppercase"
+      <section
+        aria-labelledby="backups-heading"
+        className="border-border-subtle border-y px-1 py-4"
       >
-        Backups
-      </h3>
+        <h3 id="backups-heading" className="text-fg-primary text-sm font-semibold">
+          Backup history
+        </h3>
+        <p className="text-fg-secondary mt-1 text-xs">
+          Restore an earlier snapshot if you need to roll back local changes.
+        </p>
 
-      {backups.data === undefined ? (
-        <p role="status" className="text-fg-secondary text-2xs">
-          Reading backups…
-        </p>
-      ) : backups.data.length === 0 ? (
-        <p className="text-fg-secondary text-2xs">
-          No backups yet. One is taken automatically before any schema change or replace-import.
-        </p>
-      ) : (
-        <ul aria-labelledby="backups-heading" className="divide-y divide-(--color-border-subtle)">
-          {backups.data.slice(0, 10).map((snapshot) => (
-            <li key={snapshot.path} className="flex items-center gap-3 py-1.5">
-              <span className="min-w-0 flex-1">
-                <span className="text-fg-primary block truncate font-mono text-2xs">
-                  {snapshot.fileName}
+        {backups.data === undefined ? (
+          <p role="status" className="text-fg-secondary mt-4 text-2xs">
+            Reading backups…
+          </p>
+        ) : backups.data.length === 0 ? (
+          <p className="text-fg-secondary mt-4 text-2xs">
+            No backups yet. One is taken automatically before any schema change or replace-import.
+          </p>
+        ) : (
+          <ul
+            aria-labelledby="backups-heading"
+            className="border-border-subtle mt-3 divide-y divide-(--color-border-subtle) border-t"
+          >
+            {backups.data.slice(0, 10).map((snapshot) => (
+              <li key={snapshot.path} className="flex items-center gap-3 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="text-fg-primary block truncate font-mono text-2xs">
+                    {snapshot.fileName}
+                  </span>
+                  <span className="text-fg-secondary text-2xs">
+                    {snapshot.manual ? "Taken by you" : "Taken automatically"} ·{" "}
+                    <span data-numeric>{formatBytes(snapshot.sizeBytes)}</span>
+                  </span>
                 </span>
-                <span className="text-fg-secondary text-2xs">
-                  {snapshot.manual ? "Taken by you" : "Taken automatically"} ·{" "}
-                  <span data-numeric>{formatBytes(snapshot.sizeBytes)}</span>
-                </span>
-              </span>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setRestoring({ path: snapshot.path, fileName: snapshot.fileName });
-                }}
-              >
-                Restore…
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setRestoring({ path: snapshot.path, fileName: snapshot.fileName });
+                  }}
+                >
+                  <RotateCcw size={12} aria-hidden />
+                  Restore…
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {restoring !== null ? (
         <ConfirmDialog

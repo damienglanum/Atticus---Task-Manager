@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Archive,
   ArchiveRestore,
+  ChevronRight,
   ChevronsUpDown,
   FileText,
   FolderX,
@@ -23,7 +24,7 @@ import { MenuContent, MenuItem, MenuSeparator } from "@/components/ui/Menu";
 import { initialsOf } from "@/features/profile/queries";
 import { cn } from "@/lib/cn";
 import type { Project } from "@/lib/bindings/Project";
-import { ProjectDot } from "./ProjectColor";
+import { colorVariable } from "./colors";
 
 /** The workspace-level destinations, as distinct from an individual project. */
 export type WorkspaceView = "dashboard" | "projects" | "notes" | "board";
@@ -144,8 +145,17 @@ export function ProjectSidebar({
           />
         </ul>
 
-        <div className="mt-5 mb-1.5 flex items-center justify-between gap-2">
-          <SectionLabel>Projects</SectionLabel>
+        <div className="mt-5 mb-1.5 flex items-center justify-between gap-2 px-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="text-fg-secondary text-2xs font-semibold tracking-[0.08em] uppercase">
+              Projects
+            </h2>
+            {active.length > 0 ? (
+              <span data-numeric className="text-fg-secondary text-2xs">
+                {active.length}
+              </span>
+            ) : null}
+          </div>
           <IconButton label="New project" onClick={onCreate}>
             <Plus size={15} aria-hidden />
           </IconButton>
@@ -170,16 +180,24 @@ export function ProjectSidebar({
         )}
 
         {archived.length > 0 ? (
-          <div className="mt-5">
+          <div className="mt-4">
             <button
               type="button"
               onClick={() => {
                 setShowArchived((value) => !value);
               }}
               aria-expanded={showArchived}
-              className="text-fg-secondary hover:text-fg-primary flex w-full cursor-default items-center justify-between rounded-md px-2 py-1 text-2xs font-semibold tracking-[0.08em] uppercase"
+              className="text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-2xs font-semibold tracking-[0.08em] uppercase"
             >
-              <span>Archived</span>
+              <ChevronRight
+                size={12}
+                aria-hidden
+                className={cn(
+                  "transition-transform duration-(--duration-fast)",
+                  showArchived ? "rotate-90" : "",
+                )}
+              />
+              <span className="flex-1 text-left">Archived</span>
               <span data-numeric>{archived.length}</span>
             </button>
 
@@ -282,25 +300,44 @@ function ProjectRow({ project, selected, onSelect, onEdit, onArchive, onDelete }
     <li className="group relative">
       <button
         type="button"
+        aria-label={project.name}
         aria-current={selected ? "true" : undefined}
         onClick={() => {
           onSelect(project);
         }}
         className={cn(
-          "flex w-full cursor-default items-center gap-2.5 rounded-md py-2 pr-8 pl-2 text-left text-sm",
+          "flex w-full cursor-default items-center gap-2.5 rounded-md py-1.5 pr-8 pl-2 text-left",
+          "transition-colors duration-(--duration-fast)",
           selected
-            ? "bg-accent-bg text-accent-fg font-medium"
+            ? "bg-accent-bg text-accent-fg"
             : "text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary",
           isArchived ? "opacity-70" : "",
         )}
       >
-        <ProjectDot color={project.color} />
-        <span className="truncate">{project.name}</span>
+        <span
+          aria-hidden
+          className="h-7 w-0.5 shrink-0 rounded-full"
+          style={{ backgroundColor: colorVariable(project.color) }}
+        />
+        <span className="min-w-0 flex-1">
+          <span className={cn("block truncate text-sm", selected ? "font-medium" : "")}>
+            {project.name}
+          </span>
+          <span
+            data-numeric
+            className={cn(
+              "block truncate font-mono text-2xs",
+              selected ? "text-accent-fg" : "text-fg-secondary",
+            )}
+          >
+            {project.keyPrefix}
+          </span>
+        </span>
         {project.directoryMissing ? (
           <FolderX
             size={12}
             aria-label="Project directory is missing"
-            className="text-warning-fg ml-auto shrink-0"
+            className="text-warning-fg shrink-0"
           />
         ) : null}
       </button>
@@ -309,7 +346,7 @@ function ProjectRow({ project, selected, onSelect, onEdit, onArchive, onDelete }
         <DropdownMenu.Trigger asChild>
           <IconButton
             label={`Actions for ${project.name}`}
-            className="absolute top-1/2 right-0.5 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+            className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
           >
             <MoreHorizontal size={14} aria-hidden />
           </IconButton>

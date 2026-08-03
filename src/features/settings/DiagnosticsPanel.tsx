@@ -16,15 +16,18 @@ interface DiagnosticsPanelProps {
  */
 export function DiagnosticsPanel({ app, database }: DiagnosticsPanelProps) {
   return (
-    <section aria-labelledby="diagnostics-heading" className="max-w-2xl">
-      <h2
-        id="diagnostics-heading"
-        className="text-fg-secondary text-xs font-semibold tracking-[0.06em] uppercase"
-      >
-        Your data
+    <section
+      aria-labelledby="diagnostics-heading"
+      className="border-border-subtle border-y px-1 py-4"
+    >
+      <h2 id="diagnostics-heading" className="text-fg-primary text-sm font-semibold">
+        Installation details
       </h2>
+      <p className="text-fg-secondary mt-1 text-xs">
+        Useful when checking a version or locating a local backup.
+      </p>
 
-      <dl className="border-border-subtle mt-3 divide-y divide-(--color-border-subtle) border-y">
+      <dl className="border-border-subtle mt-4 divide-y divide-(--color-border-subtle) border-t">
         <Row label="Version" value={app.version} numeric />
         <Row label="Platform" value={app.platform} />
         <Row label="Database" value={database.path ?? "In memory (no file)"} mono />
@@ -57,10 +60,10 @@ function Row({
   mono?: boolean;
 }) {
   return (
-    <div className="flex gap-4 py-2">
-      <dt className="text-fg-secondary w-36 shrink-0">{label}</dt>
+    <div className="grid gap-1 py-2.5 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-4">
+      <dt className="text-fg-secondary text-xs">{label}</dt>
       <dd
-        className={`text-fg-primary break-all ${mono ? "font-mono text-xs" : ""}`}
+        className={`text-fg-primary min-w-0 break-all text-xs ${mono ? "font-mono text-2xs" : ""}`}
         data-selectable
         {...(numeric ? { "data-numeric": "" } : {})}
       >

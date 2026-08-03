@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMutation } from "@tanstack/react-query";
-import { Bell, ChevronRight, CircleHelp, LayoutGrid, Search, Settings } from "lucide-react";
+import { Bell, ChevronRight, CircleHelp, LayoutGrid, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { IconButton } from "@/components/ui/Button";
@@ -335,16 +335,6 @@ export function App() {
                 setView("dashboard");
               }}
             />
-
-            <IconButton
-              label="Settings"
-              className="size-9"
-              onClick={() => {
-                setSettingsOpen(true);
-              }}
-            >
-              <Settings size={16} aria-hidden />
-            </IconButton>
           </div>
         </header>
 

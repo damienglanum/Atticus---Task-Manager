@@ -14,6 +14,8 @@ interface DialogProps {
   // conditional expression, and "absent" and "explicitly undefined" are the same
   // thing for a prop that simply is not rendered.
   description?: string | undefined;
+  /** Lets a larger, information-dense view opt into a wider dialog. */
+  contentClassName?: string | undefined;
   children: ReactNode;
   footer?: ReactNode | undefined;
 }
@@ -32,7 +34,15 @@ interface DialogProps {
  * focus lands on the first field — the APG's "focus the most frequently used
  * element" guidance — without an `autoFocus` prop anywhere.
  */
-export function Dialog({ open, onOpenChange, title, description, children, footer }: DialogProps) {
+export function Dialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  contentClassName,
+  children,
+  footer,
+}: DialogProps) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -47,6 +57,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
             "w-[min(32rem,calc(100vw-2rem))]",
             "-translate-x-1/2 -translate-y-1/2 rounded-xl border shadow-(--shadow-overlay)",
             "max-h-[calc(100vh-4rem)] overflow-y-auto p-5",
+            contentClassName,
           )}
         >
           <div className="mb-4 pr-8">
