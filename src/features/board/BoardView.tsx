@@ -12,6 +12,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, Columns3, Plus } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { BlurFade } from "@/components/magicui/BlurFade";
 import { Button } from "@/components/ui/Button";
@@ -484,21 +485,24 @@ export function BoardView({
             ))}
           </div>
 
-          <DragOverlay dropAnimation={null}>
-            {dragging === null ? null : (
-              <div
-                style={{ width: dragWidth ?? undefined }}
-                className="border-accent-border bg-surface-raised max-w-[calc(100vw-2rem)] rounded-lg border px-3 py-2.5 shadow-(--shadow-overlay)"
-              >
-                <p className="text-fg-primary line-clamp-2 text-base font-medium break-words">
-                  {dragging.title}
-                </p>
-                <p className="text-fg-secondary mt-1.5 font-mono text-2xs" data-numeric>
-                  {projectPrefix}-{dragging.number}
-                </p>
-              </div>
-            )}
-          </DragOverlay>
+          {createPortal(
+            <DragOverlay dropAnimation={null}>
+              {dragging === null ? null : (
+                <div
+                  style={{ width: dragWidth ?? undefined }}
+                  className="border-accent-border bg-surface-raised max-w-[calc(100vw-2rem)] rounded-lg border px-3 py-2.5 shadow-(--shadow-overlay)"
+                >
+                  <p className="text-fg-primary line-clamp-2 text-base font-medium break-words">
+                    {dragging.title}
+                  </p>
+                  <p className="text-fg-secondary mt-1.5 font-mono text-2xs" data-numeric>
+                    {projectPrefix}-{dragging.number}
+                  </p>
+                </div>
+              )}
+            </DragOverlay>,
+            document.body,
+          )}
         </DndContext>
       </div>
 
