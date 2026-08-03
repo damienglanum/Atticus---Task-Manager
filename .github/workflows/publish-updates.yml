@@ -13,10 +13,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish:
+  prepare:
     if: github.ref_name == 'main'
-    # The app currently targets the Apple Silicon Mac used for development.
-    runs-on: macos-15
+    runs-on: ubuntu-22.04
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      # Main is a moving release tag with a stable latest.json URL. Remove the
+      # previous release once, before either platform starts uploading.
+      - name: Remove the previous main release
+        run: |
+          if gh release view main --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete main --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          fi
+
+  publish:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      # tauri-action merges each platform into latest.json. Serial uploads keep
+      # that read-modify-write deterministic instead of racing the same asset.
+      max-parallel: 1
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            platform: macos-15
+            rust_target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - name: Linux x86_64
+            platform: ubuntu-22.04
+            rust_target: ""
+            args: --bundles appimage,deb
+
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.platform }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -32,7 +62,13 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Require the updater signing key
         run: test -n "$TAURI_SIGNING_PRIVATE_KEY"
@@ -43,23 +79,24 @@ jobs:
       - name: Set the automatic build version
         run: node scripts/set-ci-version.mjs "0.1.${{ github.run_number }}"
 
-      # Main is a moving release tag with a stable latest.json URL. The
-      # old release must go before Tauri Action can upload assets with the same
-      # filenames. A check that lands during this short window simply retries at
-      # the app's next scheduled check.
-      - name: Remove the previous channel release
-        continue-on-error: true
-        run: gh release delete main --cleanup-tag --yes
-
-      - name: Build, sign, and publish the channel
+      - name: Build, sign, and upload ${{ matrix.name }}
         uses: tauri-apps/tauri-action@v1
         with:
           tagName: main
           releaseName: Atticus main build ${{ github.run_number }}
-          releaseBody: Automatic build from `main` at `${{ github.sha }}`.
-          releaseDraft: false
+          releaseBody: Automatic macOS and Linux build from `main` at `${{ github.sha }}`.
+          # Keep downloads hidden until every platform and latest.json entry is
+          # present. The finalize job publishes the complete release.
+          releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
-          # `dmg` is the first-install download; `app` is the updater-enabled
-          # target that also produces the signed .app.tar.gz and latest.json.
-          args: --target aarch64-apple-darwin --bundles app,dmg
+          args: ${{ matrix.args }}
+
+  finalize:
+    needs: publish
+    runs-on: ubuntu-22.04
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Publish the complete release
+        run: gh release edit main --repo "$GITHUB_REPOSITORY" --draft=false

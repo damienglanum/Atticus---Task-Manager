@@ -111,8 +111,13 @@ npm run tauri build
 
 Produces a `.dmg` under `src-tauri/target/release/bundle/dmg/`. The `.app` is built as an
 intermediate — a disk image is made from one — and then removed, so installing leaves a single copy
-of the application rather than a loose bundle beside the image it came out of. The built application runs
-with no dev server and no network connection.
+of the application rather than a loose bundle beside the image it came out of. The built application
+runs with no dev server and no network connection.
+
+Linux releases are built on Ubuntu 22.04 for x86_64 and include two downloads:
+
+- `.AppImage` is the portable, self-updating build. Make it executable, then run it.
+- `.deb` installs through Debian, Ubuntu, and distributions based on them.
 
 ## Automatic updates
 
@@ -122,7 +127,8 @@ shows a blue header banner with **Restart to update**. Debug executables deliber
 self-update because replacing `target/debug` would interfere with the source build; install one
 release build first.
 
-`.github/workflows/publish-updates.yml` builds and publishes `main` automatically on every push.
+`.github/workflows/publish-updates.yml` builds macOS Apple Silicon and Linux x86_64 downloads and
+publishes `main` automatically on every push. The release stays a draft until both platforms finish.
 Its one-time repository setup is the updater private key, which is generated locally in the
 gitignored `.updater-keys/` directory:
 
