@@ -2,6 +2,7 @@
   "name": "atticus-task-manager",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "npm@10.9.4",
   "type": "module",
   "description": "A local-first Kanban task manager for personal software projects.",
   "license": "MIT",
