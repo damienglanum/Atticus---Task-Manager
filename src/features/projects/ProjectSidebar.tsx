@@ -45,6 +45,9 @@ interface ProjectSidebarProps {
   onRenameProfile: () => void;
   onSelect: (project: Project) => void;
   onSelectMcpBoard: (board: Board) => void;
+  onCreateMcpBoard: (project: Project) => void;
+  onRenameMcpBoard: (board: Board) => void;
+  onDeleteMcpBoard: (board: Board) => void;
   onCreate: () => void;
   onEdit: (project: Project) => void;
   onArchive: (project: Project, archived: boolean) => void;
@@ -105,6 +108,9 @@ export function ProjectSidebar({
   onRenameProfile,
   onSelect,
   onSelectMcpBoard,
+  onCreateMcpBoard,
+  onRenameMcpBoard,
+  onDeleteMcpBoard,
   onCreate,
   onEdit,
   onArchive,
@@ -261,7 +267,7 @@ export function ProjectSidebar({
                               {projectBoards.map((board) => {
                                 const selected = board.id === selectedBoardId && view === "board";
                                 return (
-                                  <li key={board.id}>
+                                  <li key={board.id} className="group/board relative">
                                     <button
                                       type="button"
                                       aria-label={`${board.name} in ${project.name}`}
@@ -270,7 +276,7 @@ export function ProjectSidebar({
                                         onSelectMcpBoard(board);
                                       }}
                                       className={cn(
-                                        "flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs",
+                                        "flex w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-left text-xs",
                                         selected
                                           ? "bg-accent-solid text-on-solid font-medium"
                                           : "text-fg-secondary hover:bg-surface-card hover:text-fg-primary",
@@ -279,11 +285,58 @@ export function ProjectSidebar({
                                       <LayoutGrid size={12} aria-hidden className="shrink-0" />
                                       <span className="truncate">{board.name}</span>
                                     </button>
+
+                                    <DropdownMenu.Root>
+                                      <DropdownMenu.Trigger asChild>
+                                        <IconButton
+                                          label={`Actions for board ${board.name}`}
+                                          className="absolute top-1/2 right-0.5 -translate-y-1/2 opacity-60 group-hover/board:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                                        >
+                                          <MoreHorizontal size={12} aria-hidden />
+                                        </IconButton>
+                                      </DropdownMenu.Trigger>
+                                      <DropdownMenu.Portal>
+                                        <MenuContent align="start" className="min-w-40">
+                                          <MenuItem
+                                            onSelect={() => {
+                                              onRenameMcpBoard(board);
+                                            }}
+                                          >
+                                            <Pencil size={13} aria-hidden />
+                                            Rename board…
+                                          </MenuItem>
+                                          {projectBoards.length > 1 ? (
+                                            <MenuItem
+                                              destructive
+                                              onSelect={() => {
+                                                onDeleteMcpBoard(board);
+                                              }}
+                                            >
+                                              <Trash2 size={13} aria-hidden />
+                                              Delete board…
+                                            </MenuItem>
+                                          ) : null}
+                                        </MenuContent>
+                                      </DropdownMenu.Portal>
+                                    </DropdownMenu.Root>
                                   </li>
                                 );
                               })}
                             </ul>
                           )}
+                          {project.archivedAt === null ? (
+                            <button
+                              type="button"
+                              aria-label={`Add board to ${project.name}`}
+                              onClick={() => {
+                                onCreateMcpBoard(project);
+                              }}
+                              className="text-fg-secondary hover:bg-surface-card hover:text-fg-primary ml-4 mt-1 flex w-[calc(100%-1rem)] cursor-default items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-2xs"
+                            >
+                              <Plus size={11} aria-hidden />
+                              Add board
+                            </button>
+                          ) : null}
                         </div>
                       </li>
                     );

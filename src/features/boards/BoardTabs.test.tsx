@@ -79,21 +79,6 @@ describe("BoardTabs", () => {
     expect(screen.getByRole("button", { name: "New board" })).toBeInTheDocument();
   });
 
-  it("can reserve board creation for the AI-managed sidebar", () => {
-    const boards = [makeBoard("b1", "Board", 0)];
-    render(
-      <BoardTabs
-        boards={boards}
-        selectedId="b1"
-        onSelect={vi.fn()}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByRole("button", { name: "New board" })).not.toBeInTheDocument();
-  });
-
   it("reports the board the user picked", async () => {
     const handlers = setup([makeBoard("b1", "Board", 0), makeBoard("b2", "Ideas", 1)], "b1");
 

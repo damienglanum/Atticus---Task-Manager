@@ -56,7 +56,8 @@ import { applyThemePreference } from "./theme";
 type ProjectDialogState =
   { mode: "closed" } | { mode: "create" } | { mode: "edit"; project: Project };
 
-type BoardDialogState = { mode: "closed" } | { mode: "create" } | { mode: "rename"; board: Board };
+type BoardDialogState =
+  { mode: "closed" } | { mode: "create"; projectId: string } | { mode: "rename"; board: Board };
 
 export function App() {
   const client = useQueryClient();
@@ -269,9 +270,10 @@ export function App() {
   const submitBoard = async (name: string) => {
     if (boardDialog.mode === "rename") {
       await updateBoard.mutateAsync({ id: boardDialog.board.id, patch: { name } });
-    } else if (selectedProjectId !== null) {
-      const board = await createBoard.mutateAsync({ projectId: selectedProjectId, name });
+    } else if (boardDialog.mode === "create") {
+      const board = await createBoard.mutateAsync({ projectId: boardDialog.projectId, name });
       setWorkspace.mutate({ projectId: board.projectId, boardId: board.id });
+      setView("board");
     }
     setBoardDialog({ mode: "closed" });
   };
@@ -293,6 +295,22 @@ export function App() {
         }}
         onSelect={openProject}
         onSelectMcpBoard={openBoard}
+        onCreateMcpBoard={(project) => {
+          setBoardDialog({ mode: "create", projectId: project.id });
+        }}
+        onRenameMcpBoard={(board) => {
+          setBoardDialog({ mode: "rename", board });
+        }}
+        onDeleteMcpBoard={(board) => {
+          deleteBoard.mutate(
+            { id: board.id, projectId: board.projectId },
+            {
+              onError: (error: unknown) => {
+                notifyError(describeAppError(toAppError(error)));
+              },
+            },
+          );
+        }}
         onCreate={() => {
           setProjectDialog({ mode: "create" });
         }}
@@ -405,13 +423,9 @@ export function App() {
                     boards={boards.data}
                     selectedId={selectedBoardId}
                     onSelect={openBoard}
-                    {...(selectedProject.mcpManaged
-                      ? {}
-                      : {
-                          onCreate: () => {
-                            setBoardDialog({ mode: "create" });
-                          },
-                        })}
+                    onCreate={() => {
+                      setBoardDialog({ mode: "create", projectId: selectedProject.id });
+                    }}
                     onRename={(board) => {
                       setBoardDialog({ mode: "rename", board });
                     }}

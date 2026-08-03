@@ -41,6 +41,9 @@ function setup(props: Partial<Parameters<typeof ProjectSidebar>[0]> = {}) {
   const handlers = {
     onSelect: vi.fn(),
     onSelectMcpBoard: vi.fn(),
+    onCreateMcpBoard: vi.fn(),
+    onRenameMcpBoard: vi.fn(),
+    onDeleteMcpBoard: vi.fn(),
     onCreate: vi.fn(),
     onEdit: vi.fn(),
     onArchive: vi.fn(),
@@ -131,6 +134,40 @@ describe("ProjectSidebar", () => {
     await userEvent.click(screen.getByRole("button", { name: "Agent work in Release agent" }));
 
     expect(handlers.onSelectMcpBoard).toHaveBeenCalledExactlyOnceWith(board);
+  });
+
+  it("lets the owner add, rename, and delete boards inside the AI section", async () => {
+    const project = makeProject({ id: "ai-1", name: "Phase 0", mcpManaged: true });
+    const first = makeBoard({ id: "b1", name: "Decide & record" });
+    const second = makeBoard({ id: "b2", name: "Research" });
+    const handlers = setup({ mcpProjects: [project], mcpBoards: [first, second] });
+
+    await userEvent.click(screen.getByRole("button", { name: "Add board to Phase 0" }));
+    expect(handlers.onCreateMcpBoard).toHaveBeenCalledExactlyOnceWith(project);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Actions for board Decide & record" }),
+    );
+    await userEvent.click(screen.getByRole("menuitem", { name: "Rename board…" }));
+    expect(handlers.onRenameMcpBoard).toHaveBeenCalledExactlyOnceWith(first);
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions for board Research" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete board…" }));
+    expect(handlers.onDeleteMcpBoard).toHaveBeenCalledExactlyOnceWith(second);
+  });
+
+  it("does not offer deletion for the last AI board", async () => {
+    setup({
+      mcpProjects: [makeProject({ id: "ai-1", name: "Phase 0", mcpManaged: true })],
+      mcpBoards: [makeBoard({ name: "Decide & record" })],
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Actions for board Decide & record" }),
+    );
+
+    expect(screen.getByRole("menuitem", { name: "Rename board…" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Delete board…" })).not.toBeInTheDocument();
   });
 
   it("does not show an archived section when nothing is archived", () => {

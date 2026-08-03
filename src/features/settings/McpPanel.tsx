@@ -67,6 +67,7 @@ export function McpPanel() {
               <p className="text-fg-secondary mt-1 text-2xs leading-relaxed">
                 MCP can create and change work only in projects it created itself. Existing and
                 user-created projects are always write-protected, even when Read &amp; write is on.
+                You keep the normal create, rename, and remove controls inside AI Boards.
               </p>
             </div>
 

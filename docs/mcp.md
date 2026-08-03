@@ -56,8 +56,9 @@ before the normal database mutation runs.
 Existing projects receive no marker during migration, so upgrading protects all existing work by
 default. Projects created in the normal Atticus interface are also unmarked and protected. An
 imported project is treated as user-owned unless it was restored as part of a complete database
-backup that already contained the ownership marker. The user can still inspect, rename, archive,
-or delete AI work in the app; this boundary restricts the MCP client, not the owner of the data.
+backup that already contained the ownership marker. The user can still create, inspect, rename,
+archive, or delete AI work in the app; this boundary restricts the MCP client, not the owner of
+the data.
 
 Treat everything placed inside an AI-managed project as AI-writable. The boundary is at the project
 level so boards, labels, and tasks cannot accidentally acquire mismatched permissions.
