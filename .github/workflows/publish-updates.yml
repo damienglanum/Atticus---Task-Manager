@@ -2,23 +2,22 @@ name: Publish automatic update
 
 on:
   push:
-    branches: [dev, main]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: atticus-update-${{ github.ref_name }}
+  group: atticus-update-main
   cancel-in-progress: true
 
 jobs:
   publish:
-    if: github.ref_name == 'dev' || github.ref_name == 'main'
+    if: github.ref_name == 'main'
     # The app currently targets the Apple Silicon Mac used for development.
     runs-on: macos-15
     env:
-      CHANNEL: ${{ github.ref_name }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
@@ -44,21 +43,21 @@ jobs:
       - name: Set the automatic build version
         run: node scripts/set-ci-version.mjs "0.1.${{ github.run_number }}"
 
-      # Each channel is a moving release tag with a stable latest.json URL. The
+      # Main is a moving release tag with a stable latest.json URL. The
       # old release must go before Tauri Action can upload assets with the same
       # filenames. A check that lands during this short window simply retries at
       # the app's next scheduled check.
       - name: Remove the previous channel release
         continue-on-error: true
-        run: gh release delete "$CHANNEL" --cleanup-tag --yes
+        run: gh release delete main --cleanup-tag --yes
 
       - name: Build, sign, and publish the channel
         uses: tauri-apps/tauri-action@v1
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Atticus ${{ github.ref_name }} build ${{ github.run_number }}
-          releaseBody: Automatic build from `${{ github.ref_name }}` at `${{ github.sha }}`.
+          tagName: main
+          releaseName: Atticus main build ${{ github.run_number }}
+          releaseBody: Automatic build from `main` at `${{ github.sha }}`.
           releaseDraft: false
-          prerelease: ${{ github.ref_name == 'dev' }}
+          prerelease: false
           uploadUpdaterJson: true
           args: --target aarch64-apple-darwin

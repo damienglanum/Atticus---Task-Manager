@@ -398,9 +398,9 @@ persisted value is refetched on close.
   or list any path. File references are chosen through the system dialog (user-gated) and opened
   through a Rust command.
 - **No `shell` or updater plugin permission is exposed to the webview.** Nothing in the interface
-  can execute a subprocess, select an update URL, or install arbitrary bytes. The `dev`/`main`
-  choice crosses one typed command; Rust owns the fixed HTTPS feeds and the updater verifies every
-  artifact against the embedded public key before installation.
+  can execute a subprocess, select an update URL, or install arbitrary bytes. Rust owns one fixed
+  HTTPS feed for `main` and verifies every artifact against the embedded public key before
+  installation. The webview receives status and may request a restart only after installation.
 - **CSP** (explicit, since Tauri applies none unless configured):
   `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`
   (`style-src 'unsafe-inline'` is required by Tailwind's runtime-injected styles; it is the one

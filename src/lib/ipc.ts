@@ -46,7 +46,7 @@ import type { NewTask } from "./bindings/NewTask";
 import type { Task } from "./bindings/Task";
 import type { TaskPatch } from "./bindings/TaskPatch";
 import type { ThemePreference } from "./bindings/ThemePreference";
-import type { UpdateChannel } from "./bindings/UpdateChannel";
+import type { UpdateStatus } from "./bindings/UpdateStatus";
 import type { UndoRecord } from "./bindings/UndoRecord";
 import type { Workspace } from "./bindings/Workspace";
 import { IpcError, toAppError } from "./errors";
@@ -67,8 +67,6 @@ export const ipc = {
   preferencesGet: () => call<Preferences>("preferences_get"),
   preferencesSetTheme: (theme: ThemePreference) =>
     call<Preferences>("preferences_set_theme", { theme }),
-  preferencesSetUpdateChannel: (updateChannel: UpdateChannel) =>
-    call<Preferences>("preferences_set_update_channel", { updateChannel }),
   // The titlebar is drawn by macOS from the window's own theme, not from the
   // web contents. See `window_set_theme` in Rust.
   windowSetTheme: (theme: ResolvedTheme) => call<null>("window_set_theme", { theme }),
@@ -210,6 +208,15 @@ export const ipc = {
    * bad, and an error toast on top of one is worse.
    */
   appReady: () => call<null>("app_ready").catch(() => null),
+
+  updatesStatus: () => call<UpdateStatus>("updates_status"),
+  updatesRestart: () => call<null>("updates_restart"),
+  listenUpdateStatus: async (onStatus: (status: UpdateStatus) => void) => {
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<UpdateStatus>("atticus://update-status", (event) => {
+      onStatus(event.payload);
+    });
+  },
 
   notesList: (projectId: string) => call<Note[]>("notes_list", { projectId }),
   noteCreate: (projectId: string, title: string) => call<Note>("note_create", { projectId, title }),

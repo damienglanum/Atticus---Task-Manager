@@ -1,60 +1,74 @@
-//! Signed automatic updates from the selected GitHub release channel.
+//! Signed automatic updates from Atticus' main GitHub release feed.
 //!
-//! The frontend can choose `dev` or `main`, but it never receives updater
-//! permissions or an arbitrary URL. Endpoint selection, signature validation,
-//! installation and restart all stay in Rust.
+//! Checking, downloading, signature validation and installation stay in Rust.
+//! The webview receives only progress/status and may request a restart after a
+//! verified update has been installed.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
+use ts_rs::TS;
 
-use crate::commands::preferences::UpdateChannel;
 use crate::error::{AppError, AppResult};
 
 const UPDATE_INTERVAL: Duration = Duration::from_secs(30 * 60);
-const RELEASES: &str = "https://github.com/damienglanum/Atticus---Task-Manager/releases/download";
+const UPDATE_ENDPOINT: &str =
+    "https://github.com/damienglanum/Atticus---Task-Manager/releases/download/main/latest.json";
+const STATUS_EVENT: &str = "atticus://update-status";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "state", rename_all = "camelCase")]
+#[ts(export, export_to = "UpdateStatus.ts")]
+pub enum UpdateStatus {
+    Idle,
+    Downloading {
+        version: String,
+        #[ts(type = "number")]
+        downloaded: u64,
+        #[ts(type = "number | null")]
+        total: Option<u64>,
+    },
+    Ready {
+        version: String,
+    },
+}
 
 pub struct AutoUpdater {
-    channel: AtomicU8,
     checking: AtomicBool,
+    status: Mutex<UpdateStatus>,
+}
+
+impl Default for AutoUpdater {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AutoUpdater {
-    pub fn new(channel: UpdateChannel) -> Self {
+    pub fn new() -> Self {
         Self {
-            channel: AtomicU8::new(channel_number(channel)),
             checking: AtomicBool::new(false),
+            status: Mutex::new(UpdateStatus::Idle),
         }
     }
 
-    fn channel(&self) -> UpdateChannel {
-        match self.channel.load(Ordering::Relaxed) {
-            0 => UpdateChannel::Dev,
-            _ => UpdateChannel::Main,
-        }
+    fn status(&self) -> UpdateStatus {
+        self.status
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 
-    fn set_channel(&self, channel: UpdateChannel) {
-        self.channel
-            .store(channel_number(channel), Ordering::Relaxed);
+    fn replace_status(&self, status: UpdateStatus) {
+        *self
+            .status
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = status;
     }
-}
-
-const fn channel_number(channel: UpdateChannel) -> u8 {
-    match channel {
-        UpdateChannel::Dev => 0,
-        UpdateChannel::Main => 1,
-    }
-}
-
-fn endpoint(channel: UpdateChannel) -> String {
-    let channel = match channel {
-        UpdateChannel::Dev => "dev",
-        UpdateChannel::Main => "main",
-    };
-    format!("{RELEASES}/{channel}/latest.json")
 }
 
 /// Starts one immediate check and then checks again while the app remains open.
@@ -76,55 +90,48 @@ pub fn start(app: AppHandle) {
         });
 }
 
-/// Changes the live channel and checks it immediately.
-pub fn set_channel(app: &AppHandle, channel: UpdateChannel) {
-    let updater = app.state::<AutoUpdater>();
-    updater.set_channel(channel);
-    if !cfg!(debug_assertions) {
-        spawn_check(app.clone());
-    }
-}
-
 fn spawn_check(app: AppHandle) {
-    let checked_channel = {
-        let updater = app.state::<AutoUpdater>();
-        if updater.checking.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        updater.channel()
-    };
+    let updater = app.state::<AutoUpdater>();
+    if updater.checking.swap(true, Ordering::AcqRel) {
+        return;
+    }
 
     tauri::async_runtime::spawn(async move {
-        match check_and_install(&app, checked_channel).await {
-            Ok(true) => app.restart(),
-            Ok(false) => {}
-            Err(error) => eprintln!("updater: {error}"),
+        if let Err(error) = check_and_install(&app).await {
+            set_status(&app, UpdateStatus::Idle);
+            eprintln!("updater: {error}");
         }
 
-        let requested_channel = {
-            let updater = app.state::<AutoUpdater>();
-            updater.checking.store(false, Ordering::Release);
-            updater.channel()
-        };
-
-        // A setting change may have landed while the old channel was checking.
-        if requested_channel != checked_channel {
-            spawn_check(app);
-        }
+        app.state::<AutoUpdater>()
+            .checking
+            .store(false, Ordering::Release);
     });
 }
 
-async fn check_and_install(app: &AppHandle, channel: UpdateChannel) -> AppResult<bool> {
-    let endpoint = endpoint(channel)
+fn set_status(app: &AppHandle, status: UpdateStatus) {
+    app.state::<AutoUpdater>().replace_status(status.clone());
+    // A frontend that is not ready yet recovers the same value through
+    // `updates_status`, so a missed launch-time event cannot lose the banner.
+    let _ = app.emit(STATUS_EVENT, status);
+}
+
+async fn check_and_install(app: &AppHandle) -> AppResult<()> {
+    // Once installed, wait for the user to restart. Re-checking the same feed
+    // would only redownload the same update into the still-running old process.
+    if matches!(
+        app.state::<AutoUpdater>().status(),
+        UpdateStatus::Ready { .. }
+    ) {
+        return Ok(());
+    }
+
+    let endpoint = UPDATE_ENDPOINT
         .parse()
         .map_err(|error| AppError::internal(format!("invalid update endpoint: {error}")))?;
     let updater = app
         .updater_builder()
         .endpoints(vec![endpoint])
-        .map_err(|error| AppError::internal(format!("could not select update channel: {error}")))?
-        // Switching from a newer dev build to main is an intentional channel
-        // change and may be a semantic-version downgrade.
-        .version_comparator(|current, release| release.version != current)
+        .map_err(|error| AppError::internal(format!("could not select update feed: {error}")))?
         .build()
         .map_err(|error| AppError::internal(format!("could not initialise updater: {error}")))?;
 
@@ -133,14 +140,59 @@ async fn check_and_install(app: &AppHandle, channel: UpdateChannel) -> AppResult
         .await
         .map_err(|error| AppError::internal(format!("update check failed: {error}")))?
     else {
-        return Ok(false);
+        set_status(app, UpdateStatus::Idle);
+        return Ok(());
     };
 
+    let version = update.version.clone();
+    set_status(
+        app,
+        UpdateStatus::Downloading {
+            version: version.clone(),
+            downloaded: 0,
+            total: None,
+        },
+    );
+
+    let progress_app = app.clone();
+    let progress_version = version.clone();
+    let mut downloaded = 0_u64;
     update
-        .download_and_install(|_, _| {}, || {})
+        .download_and_install(
+            move |chunk_length, total| {
+                downloaded = downloaded.saturating_add(chunk_length as u64);
+                set_status(
+                    &progress_app,
+                    UpdateStatus::Downloading {
+                        version: progress_version.clone(),
+                        downloaded,
+                        total,
+                    },
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|error| AppError::internal(format!("update install failed: {error}")))?;
-    Ok(true)
+
+    set_status(app, UpdateStatus::Ready { version });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn updates_status(updater: State<'_, AutoUpdater>) -> UpdateStatus {
+    updater.status()
+}
+
+#[tauri::command]
+pub fn updates_restart(app: AppHandle, updater: State<'_, AutoUpdater>) -> AppResult<()> {
+    if !matches!(updater.status(), UpdateStatus::Ready { .. }) {
+        return Err(AppError::validation(
+            "update",
+            "The update has not finished downloading yet.",
+        ));
+    }
+    app.restart()
 }
 
 #[cfg(test)]
@@ -148,14 +200,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn channels_have_separate_fixed_feed_locations() {
+    fn updates_have_one_fixed_main_feed() {
         assert_eq!(
-            endpoint(UpdateChannel::Dev),
-            "https://github.com/damienglanum/Atticus---Task-Manager/releases/download/dev/latest.json"
-        );
-        assert_eq!(
-            endpoint(UpdateChannel::Main),
+            UPDATE_ENDPOINT,
             "https://github.com/damienglanum/Atticus---Task-Manager/releases/download/main/latest.json"
         );
+    }
+
+    #[test]
+    fn updater_starts_idle() {
+        assert_eq!(AutoUpdater::new().status(), UpdateStatus::Idle);
     }
 }

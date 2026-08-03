@@ -6,14 +6,12 @@ import { Dialog } from "@/components/ui/Dialog";
 import { notify, notifyError } from "@/app/toast";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
-import type { UpdateChannel } from "@/lib/bindings/UpdateChannel";
 import { describeAppError, toAppError } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
 import { queryKeys } from "@/lib/query/keys";
 import { DataPanel } from "./DataPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ThemeControl } from "./ThemeControl";
-import { UpdateChannelControl } from "./UpdateChannelControl";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -21,9 +19,6 @@ interface SettingsDialogProps {
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
   themePending: boolean;
-  updateChannel: UpdateChannel;
-  onUpdateChannelChange: (channel: UpdateChannel) => void;
-  updateChannelPending: boolean;
   projects: Project[];
   /** Called after an import or restore, which replaces everything on screen. */
   onDataReplaced: () => void;
@@ -35,9 +30,6 @@ export function SettingsDialog({
   theme,
   onThemeChange,
   themePending,
-  updateChannel,
-  onUpdateChannelChange,
-  updateChannelPending,
   projects,
   onDataReplaced,
 }: SettingsDialogProps) {
@@ -77,16 +69,10 @@ export function SettingsDialog({
           <h3 className="text-fg-secondary text-xs font-semibold tracking-[0.06em] uppercase">
             Automatic updates
           </h3>
-          <div className="mt-2">
-            <UpdateChannelControl
-              value={updateChannel}
-              onChange={onUpdateChannelChange}
-              busy={updateChannelPending}
-            />
-          </div>
-          <p className="text-fg-secondary mt-2 max-w-2xl text-2xs">
-            Atticus checks at launch and every 30 minutes. Changing channel checks immediately. A
-            signed update installs automatically and restarts the app.
+          <p className="text-fg-secondary mt-2 max-w-2xl text-xs">
+            Atticus follows signed builds from the main branch. It checks at launch and every 30
+            minutes, downloads updates in the background, then shows a banner when a restart is
+            ready.
           </p>
         </section>
 

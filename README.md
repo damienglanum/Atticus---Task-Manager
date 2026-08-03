@@ -116,19 +116,15 @@ with no dev server and no network connection.
 
 ## Automatic updates
 
-Settings → Automatic updates selects one of two signed release feeds:
+A packaged release follows signed builds from `main`. It checks at launch and every 30 minutes
+while open. If a newer version exists, Atticus downloads and installs it in the background, then
+shows a blue header banner with **Restart to update**. Debug executables deliberately do not
+self-update because replacing `target/debug` would interfere with the source build; install one
+release build first.
 
-- **Main** follows builds published from the `main` branch.
-- **Development** follows every push to `dev` and may be less stable.
-
-A packaged release checks at launch, whenever the channel changes, and every 30 minutes while it
-is open. If a different signed version exists, Atticus installs it and restarts automatically.
-Debug executables deliberately do not self-update because replacing `target/debug` would interfere
-with the source build; install one release build first.
-
-`.github/workflows/publish-updates.yml` builds and publishes the matching channel automatically on
-every push. Its one-time repository setup is the updater private key, which is generated locally in
-the gitignored `.updater-keys/` directory:
+`.github/workflows/publish-updates.yml` builds and publishes `main` automatically on every push.
+Its one-time repository setup is the updater private key, which is generated locally in the
+gitignored `.updater-keys/` directory:
 
 ```bash
 gh auth login

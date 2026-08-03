@@ -34,6 +34,7 @@ import {
 } from "@/features/projects/queries";
 import { RecoveryScreen } from "@/features/settings/RecoveryScreen";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
+import { UpdateBanner } from "@/features/updates/UpdateBanner";
 import { BoardView } from "@/features/board/BoardView";
 import { CommandPalette } from "@/features/search/CommandPalette";
 import { useShortcuts } from "./useShortcuts";
@@ -41,7 +42,7 @@ import { useUndoAcrossApp } from "./useUndoAcrossApp";
 import type { Board } from "@/lib/bindings/Board";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
-import type { UpdateChannel } from "@/lib/bindings/UpdateChannel";
+import type { UpdateStatus } from "@/lib/bindings/UpdateStatus";
 import { cn } from "@/lib/cn";
 import { describeAppError, toAppError } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
@@ -63,7 +64,6 @@ export function App() {
     queryFn: () => ipc.preferencesGet(),
   });
   const theme: ThemePreference = preferences.data?.theme ?? "system";
-  const updateChannel: UpdateChannel = preferences.data?.updateChannel ?? "main";
   useEffect(
     () =>
       applyThemePreference(theme, (resolved) => {
@@ -85,16 +85,6 @@ export function App() {
     },
   });
 
-  const setUpdateChannel = useMutation({
-    mutationFn: (next: UpdateChannel) => ipc.preferencesSetUpdateChannel(next),
-    onSuccess: (updated) => {
-      client.setQueryData(queryKeys.preferences(), updated);
-    },
-    onError: (error: unknown) => {
-      notifyError(`Couldn't save the update channel. ${describeAppError(toAppError(error))}`);
-    },
-  });
-
   const workspace = useWorkspace();
   const setWorkspace = useSetWorkspace();
   const projects = useProjects(true);
@@ -111,6 +101,38 @@ export function App() {
   const [requestedTaskId, setRequestedTaskId] = useState<string | null>(null);
   const [renamingProfile, setRenamingProfile] = useState(false);
   const [view, setView] = useState<WorkspaceView>("board");
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle" });
+  const [updateRestarting, setUpdateRestarting] = useState(false);
+
+  useEffect(() => {
+    const lifecycle = { active: true };
+    let stopListening: (() => void) | undefined;
+
+    void (async () => {
+      try {
+        stopListening = await ipc.listenUpdateStatus((status) => {
+          if (lifecycle.active) setUpdateStatus(status);
+        });
+        if (!lifecycle.active) {
+          stopListening();
+          return;
+        }
+
+        // The release check starts before React. Reading the backend state after
+        // subscribing means a very fast download cannot lose its ready notice.
+        const current = await ipc.updatesStatus();
+        setUpdateStatus(current);
+      } catch {
+        // `npm run dev` can render the web layer outside Tauri. Updates simply
+        // stay absent there; the packaged desktop build owns this feature.
+      }
+    })();
+
+    return () => {
+      lifecycle.active = false;
+      stopListening?.();
+    };
+  }, []);
 
   const profileName = useProfileName();
   const setProfileName = useSetProfileName();
@@ -326,6 +348,18 @@ export function App() {
           </div>
         </header>
 
+        <UpdateBanner
+          status={updateStatus}
+          restarting={updateRestarting}
+          onRestart={() => {
+            setUpdateRestarting(true);
+            void ipc.updatesRestart().catch((error: unknown) => {
+              setUpdateRestarting(false);
+              notifyError(`Couldn't restart Atticus. ${describeAppError(toAppError(error))}`);
+            });
+          }}
+        />
+
         <main className="min-h-0 flex-1">
           {workspace.isPending || projects.isPending ? (
             <p role="status" className="text-fg-secondary p-6 text-sm">
@@ -478,11 +512,6 @@ export function App() {
           setTheme.mutate(next);
         }}
         themePending={setTheme.isPending}
-        updateChannel={updateChannel}
-        onUpdateChannelChange={(next) => {
-          setUpdateChannel.mutate(next);
-        }}
-        updateChannelPending={setUpdateChannel.isPending}
         projects={active}
         onDataReplaced={() => {
           // An import or a restore replaces the ids the workspace points at, so

@@ -31,13 +31,8 @@ pub fn run() {
             // reported through the normal command path so the UI can render a
             // recovery screen naming the backup, rather than the process dying
             // with the user's data unexplained.
-            let (state, update_channel) = match open_database(app.handle()) {
-                Ok(database) => {
-                    let update_channel =
-                        commands::preferences::read_update_channel(database.connection())
-                            .unwrap_or_default();
-                    (AppState::ready(database), update_channel)
-                }
+            let state = match open_database(app.handle()) {
+                Ok(database) => AppState::ready(database),
                 Err(error) => {
                     eprintln!("startup: could not open the database: {error}");
                     // The path is resolved again rather than carried out of the
@@ -47,12 +42,12 @@ pub fn run() {
                     let path = resolve_data_dir(app.handle())
                         .ok()
                         .map(|dir| dir.join(DATABASE_FILE_NAME));
-                    (AppState::failed(error, path), Default::default())
+                    AppState::failed(error, path)
                 }
             };
             app.manage(state);
             app.manage(crate::commands::splash::SplashState::default());
-            app.manage(commands::updates::AutoUpdater::new(update_channel));
+            app.manage(commands::updates::AutoUpdater::new());
 
             // The end-to-end harness pins the `main` window by label and drives
             // it directly. A second window that is briefly in front of it, and a
@@ -96,7 +91,6 @@ pub fn run() {
             commands::transfer::backup_restore,
             commands::preferences::preferences_get,
             commands::preferences::preferences_set_theme,
-            commands::preferences::preferences_set_update_channel,
             commands::preferences::window_set_theme,
             commands::preferences::ui_state_get,
             commands::preferences::ui_state_set,
@@ -149,6 +143,8 @@ pub fn run() {
             commands::detail::link_ref_remove,
             commands::splash::splash_animation_finished,
             commands::splash::app_ready,
+            commands::updates::updates_status,
+            commands::updates::updates_restart,
             commands::notes::notes_list,
             commands::notes::note_create,
             commands::notes::note_update,
