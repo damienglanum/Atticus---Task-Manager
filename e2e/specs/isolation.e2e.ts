@@ -29,6 +29,7 @@ describe("data isolation", () => {
 
   it("reports a fully migrated schema", async () => {
     await openSettings();
+    await $("button=About").click();
 
     // Freshly created and migrated, so the applied version is the latest one.
     expect(await readDiagnostic("Schema version")).toMatch(/^(\d+) of \1$/);

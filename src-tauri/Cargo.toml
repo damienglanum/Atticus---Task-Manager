@@ -37,6 +37,9 @@ ts-rs = "12"
 # on every machine and are not silently changed by an OS update.
 rusqlite = { version = "0.40", features = ["bundled"] }
 uuid = { version = "1", features = ["v7"] }
+rmcp = { version = "3", features = ["server", "transport-io"] }
+schemars = "1"
+tokio = { version = "1", features = ["io-std", "rt"] }
 # Embedded W3C WebDriver server. Optional and off by default — see the
 # `e2e-webdriver` feature below and ADR-0008.
 tauri-plugin-wdio-webdriver = { version = "1.2", optional = true }

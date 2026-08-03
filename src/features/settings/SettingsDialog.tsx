@@ -4,6 +4,7 @@ import {
   DatabaseBackup,
   HardDrive,
   Info,
+  Bot,
   Palette,
   RefreshCw,
   SlidersHorizontal,
@@ -23,6 +24,7 @@ import { ipc } from "@/lib/ipc";
 import { queryKeys } from "@/lib/query/keys";
 import { DataPanel } from "./DataPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { McpPanel } from "./McpPanel";
 import { ThemeControl } from "./ThemeControl";
 
 interface SettingsDialogProps {
@@ -36,10 +38,11 @@ interface SettingsDialogProps {
   onDataReplaced: () => void;
 }
 
-type SettingsSection = "general" | "data" | "about";
+type SettingsSection = "general" | "ai" | "data" | "about";
 
 const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: SlidersHorizontal },
+  { id: "ai", label: "AI access", icon: Bot },
   { id: "data", label: "Data", icon: HardDrive },
   { id: "about", label: "About", icon: Info },
 ];
@@ -144,6 +147,14 @@ export function SettingsDialog({
                   }
                 />
               </div>
+            </div>
+          ) : section === "ai" ? (
+            <div className="space-y-4">
+              <SettingsPageHeader
+                title="AI access"
+                description="Connect a local AI through MCP without giving it unrestricted control."
+              />
+              <McpPanel />
             </div>
           ) : section === "data" ? (
             <div className="space-y-4">

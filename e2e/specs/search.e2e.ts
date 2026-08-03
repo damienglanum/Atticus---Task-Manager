@@ -9,8 +9,10 @@
 import {
   addTaskTo,
   chooseMenuItem,
+  chooseOption,
   columnNamed,
   createProject,
+  dialogNamed,
   openMenuAt,
   openTaskMenu,
   taskCardTitled,
@@ -64,9 +66,9 @@ describe("search and filters", () => {
 
     await browser.keys("Enter");
 
-    const dialog = $('div[role="dialog"]');
+    const dialog = dialogNamed("Edit task");
     await dialog.waitForDisplayed();
-    await expect(dialog).toHaveText(expect.stringContaining("Investigate the ordering bug"));
+    await expect(dialog.$("#task-title")).toHaveValue("Investigate the ordering bug");
 
     await browser.keys("Escape");
     await dialog.waitForDisplayed({ reverse: true });
@@ -118,10 +120,10 @@ describe("search and filters", () => {
   it("filters by priority", async () => {
     await openTaskMenu("Write the release notes");
     await chooseMenuItem("Open");
-    const editor = $('div[role="dialog"]');
+    const editor = dialogNamed("Edit task");
     await editor.waitForDisplayed();
-    await editor.$('//span[normalize-space(text())="Urgent"]').click();
-    await browser.keys("Escape");
+    await chooseOption("#task-priority", "Urgent");
+    await editor.$("button=Save changes").click();
     await editor.waitForDisplayed({ reverse: true });
 
     await openMenuAt("button=Priority");

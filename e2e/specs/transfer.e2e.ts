@@ -23,12 +23,12 @@ import {
 /**
  * Every sidebar entry with this name.
  *
- * The same XPath `projectInSidebar` uses, because the name sits in a nested
- * `span` and the nav also holds the new-project and per-project menu buttons —
- * a plain `button` selector counts those too.
+ * The same accessible project button that `projectInSidebar` uses. The nav also
+ * holds the new-project and per-project menu buttons, so a plain `button`
+ * selector counts those too.
  */
 function projectsNamed(name: string) {
-  return $$(`//nav[@aria-label="Projects"]//button[.//span[normalize-space(text())="${name}"]]`);
+  return $$(`//nav[@aria-label="Workspace"]//button[@aria-label="${name}"]`);
 }
 
 /**
@@ -95,7 +95,7 @@ describe("export and import", () => {
       data: { projects: { name: string }[]; tasks: { title: string }[] };
     };
 
-    expect(document.exportVersion).toBe(1);
+    expect(document.exportVersion).toBe(3);
     expect(document.app).toBe("atticus");
     expect(document.data.projects.map((project) => project.name)).toContain("Transferable");
     expect(document.data.tasks.map((task) => task.title)).toContain("Survives a round trip");

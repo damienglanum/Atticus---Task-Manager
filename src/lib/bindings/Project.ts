@@ -5,4 +5,4 @@ export type Project = { id: string, name: string, description: string, color: st
  * Derived, never stored: a directory on an unmounted volume is still a
  * valid setting, so this is a warning for the UI rather than an error.
  */
-directoryMissing: boolean, position: number, archivedAt: number | null, createdAt: number, updatedAt: number, };
+directoryMissing: boolean, mcpManaged: boolean, position: number, archivedAt: number | null, createdAt: number, updatedAt: number, };

@@ -31,6 +31,9 @@ pub struct Project {
     /// Derived, never stored: a directory on an unmounted volume is still a
     /// valid setting, so this is a warning for the UI rather than an error.
     pub directory_missing: bool,
+    // True only for projects created through the MCP server. The marker is a
+    // database-enforced write boundary, not a user-editable project setting.
+    pub mcp_managed: bool,
     #[ts(type = "number")]
     pub position: i64,
     #[ts(type = "number | null")]
@@ -107,6 +110,7 @@ fn row_to_project(row: &Row<'_>) -> rusqlite::Result<Project> {
         next_task_number: row.get("next_task_number")?,
         directory_path,
         directory_missing,
+        mcp_managed: row.get::<_, i64>("mcp_managed")? != 0,
         position: row.get("position")?,
         archived_at: row.get("archived_at")?,
         created_at: row.get("created_at")?,
@@ -114,8 +118,11 @@ fn row_to_project(row: &Row<'_>) -> rusqlite::Result<Project> {
     })
 }
 
-const SELECT: &str = "SELECT id, name, description, color, key_prefix, next_task_number, \
-                      directory_path, position, archived_at, created_at, updated_at FROM projects";
+const SELECT: &str = "SELECT projects.id, name, description, color, key_prefix, next_task_number, \
+                      directory_path, position, archived_at, created_at, updated_at, \
+                      EXISTS(SELECT 1 FROM mcp_managed_projects managed \
+                             WHERE managed.project_id = projects.id) AS mcp_managed \
+                      FROM projects";
 
 pub fn list(conn: &Connection, include_archived: bool) -> AppResult<Vec<Project>> {
     let sql = if include_archived {
@@ -144,6 +151,21 @@ pub fn find(conn: &Connection, id: &str) -> AppResult<Project> {
 /// columns, in **one** transaction. A project without a board is not a state the
 /// user should ever be able to observe.
 pub fn create(conn: &mut Connection, input: NewProject) -> AppResult<(Project, String)> {
+    create_with_scope(conn, input, false)
+}
+
+/// Creates the isolated project that contains boards writable through MCP.
+/// The ownership marker and initial board commit in the same transaction, so a
+/// failure can never leave a normal project accidentally exposed to the AI.
+pub fn create_mcp(conn: &mut Connection, input: NewProject) -> AppResult<(Project, String)> {
+    create_with_scope(conn, input, true)
+}
+
+fn create_with_scope(
+    conn: &mut Connection,
+    input: NewProject,
+    mcp_managed: bool,
+) -> AppResult<(Project, String)> {
     let name = validate::required_text("name", &input.name, validate::PROJECT_NAME_MAX)?;
     let description = validate::optional_text(
         "description",
@@ -181,6 +203,13 @@ pub fn create(conn: &mut Connection, input: NewProject) -> AppResult<(Project, S
             now
         ],
     )?;
+
+    if mcp_managed {
+        tx.execute(
+            "INSERT INTO mcp_managed_projects (project_id, created_at) VALUES (?1, ?2)",
+            rusqlite::params![project_id, now],
+        )?;
+    }
 
     tx.execute(
         "INSERT INTO boards (id, project_id, name, position, created_at, updated_at) \

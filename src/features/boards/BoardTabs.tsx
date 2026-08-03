@@ -10,7 +10,8 @@ interface BoardTabsProps {
   boards: Board[];
   selectedId: string | null;
   onSelect: (board: Board) => void;
-  onCreate: () => void;
+  /** Omitted for an AI-managed project: MCP is the only board creator there. */
+  onCreate?: () => void;
   onRename: (board: Board) => void;
   onDelete: (board: Board) => void;
 }
@@ -70,9 +71,11 @@ export function BoardTabs({
         })}
       </div>
 
-      <IconButton label="New board" onClick={onCreate}>
-        <Plus size={14} aria-hidden />
-      </IconButton>
+      {onCreate === undefined ? null : (
+        <IconButton label="New board" onClick={onCreate}>
+          <Plus size={14} aria-hidden />
+        </IconButton>
+      )}
 
       {/* One menu, acting on the board that is open.
 

@@ -7,6 +7,7 @@
  */
 import {
   addTaskTo,
+  chooseOption,
   chooseMenuItem,
   createProject,
   dialogNamed,
@@ -21,9 +22,16 @@ async function openEditor(title: string) {
   await card.waitForDisplayed();
   await card.click();
 
-  const dialog = $('div[role="dialog"]');
+  const dialog = dialogNamed("Edit task");
   await dialog.waitForDisplayed();
   return dialog;
+}
+
+async function saveEditor(dialog: ReturnType<typeof dialogNamed>) {
+  const save = dialog.$("button=Save changes");
+  await save.waitForEnabled();
+  await save.click();
+  await dialog.waitForDisplayed({ reverse: true });
 }
 
 describe("the task editor", () => {
@@ -65,25 +73,19 @@ describe("the task editor", () => {
     await openTaskMenu("Write the release notes");
     await chooseMenuItem("Open");
 
-    const dialog = $('div[role="dialog"]');
+    const dialog = dialogNamed("Edit task");
     await dialog.waitForDisplayed();
     await browser.keys("Escape");
     await dialog.waitForDisplayed({ reverse: true });
   });
 
-  it("saves a description with no save button, and it survives a restart", async () => {
+  it("saves a description explicitly, and it survives a restart", async () => {
     const dialog = await openEditor("Write the release notes");
-
-    await expect($("button=Save")).not.toBeDisplayed();
 
     const description = $('textarea[aria-label="Edit description"]');
     await description.waitForDisplayed();
     await description.setValue("Something **important** about the release.");
-
-    // Closing immediately, with the debounce still pending: the flush on close
-    // is the part that would otherwise lose the writing (US-10 AC2).
-    await browser.keys("Escape");
-    await dialog.waitForDisplayed({ reverse: true });
+    await saveEditor(dialog);
 
     // Confirmed before the restart, so a failure says whether the write never
     // happened or merely did not survive.
@@ -98,6 +100,7 @@ describe("the task editor", () => {
     const reopened = await openEditor("Write the release notes");
     await expect(reopened).toHaveText(expect.stringContaining("about the release"));
     // Rendered as markdown, not shown as literal asterisks.
+    await reopened.$('button[aria-label="Preview the description"]').click();
     await expect(reopened.$("strong")).toHaveText("important");
 
     await browser.keys("Escape");
@@ -106,9 +109,8 @@ describe("the task editor", () => {
 
   it("sets a priority and shows it on the card, in words", async () => {
     const dialog = await openEditor("Write the release notes");
-    await dialog.$('//span[normalize-space(text())="High"]').click();
-    await browser.keys("Escape");
-    await dialog.waitForDisplayed({ reverse: true });
+    await chooseOption("#task-priority", "High");
+    await saveEditor(dialog);
 
     await expect(taskCardTitled("Write the release notes")).toHaveText(
       expect.stringContaining("High"),
@@ -119,19 +121,18 @@ describe("the task editor", () => {
     const dialog = await openEditor("Write the release notes");
 
     for (const title of ["Draft", "Review", "Publish"]) {
-      const field = dialog.$('input[aria-label="New subtask"]');
+      const field = dialog.$('input[aria-label="Add a new checklist item"]');
       await field.setValue(title);
       await browser.keys("Enter");
     }
 
     // Tick them all: the parent must not move or close (US-13 AC3).
-    const boxes = dialog.$$('input[type="checkbox"]');
+    const boxes = dialog.$$('section[aria-labelledby="checklist-heading"] input[type="checkbox"]');
     for await (const box of boxes) {
       await box.click();
     }
 
-    await browser.keys("Escape");
-    await dialog.waitForDisplayed({ reverse: true });
+    await saveEditor(dialog);
 
     await expect(taskCardTitled("Write the release notes")).toHaveText(
       expect.stringContaining("3/3"),
@@ -143,17 +144,11 @@ describe("the task editor", () => {
   it("adds a label and shows it on the card by name", async () => {
     const dialog = await openEditor("Write the release notes");
 
-    await dialog.$("button=New label").click();
-    await dialog.$('input[aria-label="New label name"]').setValue("Blocked");
-    await dialog.$("button=Add label").click();
-
-    // Newly created labels are not attached automatically — tick it.
-    const checkbox = dialog.$('//label[.//span[normalize-space(text())="Blocked"]]//input');
-    await checkbox.waitForDisplayed();
-    await checkbox.click();
-
-    await browser.keys("Escape");
-    await dialog.waitForDisplayed({ reverse: true });
+    await dialog.$("button=Add tag").click();
+    await dialog.$('input[aria-label="Tag name"]').setValue("Blocked");
+    await dialog.$("button=Add “Blocked”").click();
+    await dialog.$('button[aria-label="Remove Blocked"]').waitForDisplayed();
+    await saveEditor(dialog);
 
     await expect(taskCardTitled("Write the release notes")).toHaveText(
       expect.stringContaining("Blocked"),
@@ -167,8 +162,7 @@ describe("the task editor", () => {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     await dialog.$("#task-due").setValue(yesterday);
 
-    await browser.keys("Escape");
-    await dialog.waitForDisplayed({ reverse: true });
+    await saveEditor(dialog);
 
     await expect(taskCardTitled("Write the release notes")).toHaveText(
       expect.stringContaining("Overdue"),

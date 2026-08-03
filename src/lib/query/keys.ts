@@ -10,6 +10,9 @@ export const queryKeys = {
   databaseInfo: () => ["database-info"] as const,
   backups: () => ["backups"] as const,
   preferences: () => ["preferences"] as const,
+  mcpSettings: () => ["mcp-settings"] as const,
+  mcpLaunchConfig: () => ["mcp-launch-config"] as const,
+  mcpManagedBoards: () => ["mcp-managed-boards"] as const,
   workspace: () => ["workspace"] as const,
   projects: (includeArchived: boolean) => ["projects", { includeArchived }] as const,
   boards: (projectId: string) => ["boards", projectId] as const,
@@ -26,4 +29,4 @@ export const queryKeys = {
 } as const;
 
 /** Everything that a project mutation can invalidate. */
-export const projectScopedKeys = ["projects", "boards", "workspace"] as const;
+export const projectScopedKeys = ["projects", "boards", "mcp-managed-boards", "workspace"] as const;

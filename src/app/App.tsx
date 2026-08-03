@@ -18,6 +18,7 @@ import {
   useBoards,
   useCreateBoard,
   useDeleteBoard,
+  useMcpManagedBoards,
   useSetWorkspace,
   useUpdateBoard,
   useWorkspace,
@@ -39,6 +40,7 @@ import { BoardView } from "@/features/board/BoardView";
 import { CommandPalette } from "@/features/search/CommandPalette";
 import { useShortcuts } from "./useShortcuts";
 import { useUndoAcrossApp } from "./useUndoAcrossApp";
+import { useMcpChanges } from "./useMcpChanges";
 import type { Board } from "@/lib/bindings/Board";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
@@ -58,6 +60,7 @@ type BoardDialogState = { mode: "closed" } | { mode: "create" } | { mode: "renam
 
 export function App() {
   const client = useQueryClient();
+  useMcpChanges(client);
 
   const preferences = useQuery({
     queryKey: queryKeys.preferences(),
@@ -88,6 +91,7 @@ export function App() {
   const workspace = useWorkspace();
   const setWorkspace = useSetWorkspace();
   const projects = useProjects(true);
+  const mcpBoards = useMcpManagedBoards();
   const selectedProjectId = workspace.data?.projectId ?? null;
   const boards = useBoards(selectedProjectId);
   const selectedBoardId = workspace.data?.boardId ?? null;
@@ -179,18 +183,23 @@ export function App() {
   const updateBoard = useUpdateBoard();
   const deleteBoard = useDeleteBoard();
 
-  const { active, archived } = useMemo(() => {
+  const { active, personalActive, personalArchived, mcpProjects } = useMemo(() => {
     const all = projects.data ?? [];
+    const activeProjects = all.filter((project) => project.archivedAt === null);
     return {
-      active: all.filter((project) => project.archivedAt === null),
-      archived: all.filter((project) => project.archivedAt !== null),
+      active: activeProjects,
+      personalActive: activeProjects.filter((project) => !project.mcpManaged),
+      personalArchived: all.filter((project) => project.archivedAt !== null && !project.mcpManaged),
+      // Archived AI projects remain in their protected section so the user can
+      // restore or delete them without mixing them into personal work.
+      mcpProjects: all.filter((project) => project.mcpManaged),
     };
   }, [projects.data]);
 
   const selectedProject = active.find((project) => project.id === selectedProjectId) ?? null;
 
   /** What the bell reports: local signals only, nothing pushed from anywhere. */
-  const attentionCount = active.filter((project) => project.directoryMissing).length;
+  const attentionCount = personalActive.filter((project) => project.directoryMissing).length;
 
   // Startup failed entirely — the database could not be opened. This is the one
   // case where the recovery screen replaces the whole interface.
@@ -270,9 +279,12 @@ export function App() {
   return (
     <div className="bg-surface-app text-fg-primary flex h-full">
       <ProjectSidebar
-        active={active}
-        archived={archived}
+        active={personalActive}
+        archived={personalArchived}
+        mcpProjects={mcpProjects}
+        mcpBoards={mcpBoards.data ?? []}
         selectedId={selectedProjectId}
+        selectedBoardId={selectedBoardId}
         view={view}
         onNavigate={setView}
         profileName={profileName.data ?? ""}
@@ -280,6 +292,7 @@ export function App() {
           setRenamingProfile(true);
         }}
         onSelect={openProject}
+        onSelectMcpBoard={openBoard}
         onCreate={() => {
           setProjectDialog({ mode: "create" });
         }}
@@ -357,7 +370,7 @@ export function App() {
             </p>
           ) : view === "dashboard" ? (
             <DashboardView
-              projects={active}
+              projects={personalActive}
               boards={boards.data ?? []}
               greeting={greeting(profileName.data ?? "")}
               onOpenTask={(task) => {
@@ -367,7 +380,7 @@ export function App() {
               }}
             />
           ) : view === "projects" ? (
-            <ProjectsView projects={active} onOpen={openProject} />
+            <ProjectsView projects={personalActive} onOpen={openProject} />
           ) : view === "notes" ? (
             <NotesView projectId={selectedProjectId} projectName={selectedProject?.name ?? null} />
           ) : selectedProject === null ? (
@@ -392,9 +405,13 @@ export function App() {
                     boards={boards.data}
                     selectedId={selectedBoardId}
                     onSelect={openBoard}
-                    onCreate={() => {
-                      setBoardDialog({ mode: "create" });
-                    }}
+                    {...(selectedProject.mcpManaged
+                      ? {}
+                      : {
+                          onCreate: () => {
+                            setBoardDialog({ mode: "create" });
+                          },
+                        })}
                     onRename={(board) => {
                       setBoardDialog({ mode: "rename", board });
                     }}
@@ -566,7 +583,7 @@ function Breadcrumb({
           <button
             type="button"
             onClick={onHome}
-            className="hover:text-fg-primary flex cursor-default items-center gap-2"
+            className="hover:text-fg-primary flex min-h-6 cursor-default items-center gap-2"
           >
             <LayoutGrid size={14} aria-hidden />
             Projects

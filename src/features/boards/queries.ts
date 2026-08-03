@@ -13,6 +13,14 @@ export function useBoards(projectId: string | null) {
   });
 }
 
+/** Boards displayed in the isolated, cross-project AI sidebar section. */
+export function useMcpManagedBoards() {
+  return useQuery({
+    queryKey: queryKeys.mcpManagedBoards(),
+    queryFn: () => ipc.mcpManagedBoardsList(),
+  });
+}
+
 export function useWorkspace() {
   return useQuery({
     queryKey: queryKeys.workspace(),
@@ -37,7 +45,11 @@ export function useCreateBoard() {
   return useMutation({
     mutationFn: ({ projectId, name }: { projectId: string; name: string }) =>
       ipc.boardCreate(projectId, name),
-    onSuccess: (board) => client.invalidateQueries({ queryKey: queryKeys.boards(board.projectId) }),
+    onSuccess: (board) =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.boards(board.projectId) }),
+        client.invalidateQueries({ queryKey: queryKeys.mcpManagedBoards() }),
+      ]),
   });
 }
 
@@ -45,7 +57,11 @@ export function useUpdateBoard() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: BoardPatch }) => ipc.boardUpdate(id, patch),
-    onSuccess: (board) => client.invalidateQueries({ queryKey: queryKeys.boards(board.projectId) }),
+    onSuccess: (board) =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.boards(board.projectId) }),
+        client.invalidateQueries({ queryKey: queryKeys.mcpManagedBoards() }),
+      ]),
   });
 }
 
@@ -58,6 +74,7 @@ export function useDeleteBoard() {
     onSuccess: (_result, variables) =>
       Promise.all([
         client.invalidateQueries({ queryKey: queryKeys.boards(variables.projectId) }),
+        client.invalidateQueries({ queryKey: queryKeys.mcpManagedBoards() }),
         client.invalidateQueries({ queryKey: queryKeys.workspace() }),
       ]),
   });

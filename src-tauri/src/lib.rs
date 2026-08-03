@@ -2,6 +2,7 @@ pub mod commands;
 pub mod db;
 pub mod domain;
 pub mod error;
+pub mod mcp;
 pub mod state;
 
 use tauri::Manager;
@@ -94,6 +95,11 @@ pub fn run() {
             commands::preferences::window_set_theme,
             commands::preferences::ui_state_get,
             commands::preferences::ui_state_set,
+            commands::mcp::mcp_settings_get,
+            commands::mcp::mcp_settings_set,
+            commands::mcp::mcp_revision_get,
+            commands::mcp::mcp_managed_boards_list,
+            commands::mcp::mcp_launch_config,
             commands::projects::projects_list,
             commands::projects::project_create,
             commands::projects::project_update,

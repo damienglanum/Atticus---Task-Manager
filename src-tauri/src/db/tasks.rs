@@ -50,6 +50,17 @@ pub struct NewTask {
     pub title: String,
 }
 
+/// Optional fields supplied when a caller creates a fully described task in a
+/// single operation. Kept out of the quick-composer IPC type: that interface is
+/// intentionally only a title and destination.
+#[derive(Debug, Default)]
+pub struct NewTaskDetails {
+    pub description: Option<String>,
+    pub priority: Option<i64>,
+    pub due_date: Option<String>,
+    pub estimate_minutes: Option<i64>,
+}
+
 /// A partial edit of a task.
 ///
 /// Every field is genuinely optional — `#[ts(optional)]` so an absent key is
@@ -115,9 +126,29 @@ pub fn find(conn: &Connection, id: &str) -> AppResult<Task> {
 
 /// Creates a task at the end of its column.
 pub fn create(conn: &mut Connection, input: NewTask) -> AppResult<Task> {
+    create_with_details(conn, input, NewTaskDetails::default())
+}
+
+/// Creates a task and its initial focus-mode fields in one transaction.
+///
+/// MCP can supply all of these together. Validating and inserting them here
+/// prevents a bad due date or priority from leaving a half-created task behind.
+pub fn create_with_details(
+    conn: &mut Connection,
+    input: NewTask,
+    details: NewTaskDetails,
+) -> AppResult<Task> {
     let column = crate::db::columns::find(conn, &input.column_id)?;
     let board = crate::db::boards::find(conn, &column.board_id)?;
     let title = validate::required_text("title", &input.title, validate::TASK_TITLE_MAX)?;
+    let description = validate::optional_text(
+        "description",
+        details.description.as_deref().unwrap_or_default(),
+        validate::TASK_DESCRIPTION_MAX,
+    )?;
+    let priority = validate::priority(details.priority.unwrap_or(0))?;
+    let due_date = validate::due_date(details.due_date.as_deref())?;
+    let estimate_minutes = validate::estimate_minutes(details.estimate_minutes)?;
 
     let id = new_id();
     let now = now_ms();
@@ -128,8 +159,9 @@ pub fn create(conn: &mut Connection, input: NewTask) -> AppResult<Task> {
 
     tx.execute(
         "INSERT INTO tasks \
-         (id, project_id, board_id, column_id, number, title, position, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+         (id, project_id, board_id, column_id, number, title, description, priority, due_date, \
+          estimate_minutes, position, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12)",
         rusqlite::params![
             id,
             board.project_id,
@@ -137,6 +169,10 @@ pub fn create(conn: &mut Connection, input: NewTask) -> AppResult<Task> {
             column.id,
             number,
             title,
+            description,
+            priority,
+            due_date,
+            estimate_minutes,
             position,
             now
         ],

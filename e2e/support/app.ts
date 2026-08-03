@@ -49,7 +49,7 @@ export function dialogNamed(title: string) {
 /** Waits for the shell to have finished its first load. */
 export async function waitForAppReady(): Promise<void> {
   await pinWindow();
-  await $('button[aria-label="Settings"]').waitForDisplayed({ timeout: 20_000 });
+  await $('//button[normalize-space(.)="Settings"]').waitForDisplayed({ timeout: 20_000 });
 }
 
 /**
@@ -89,7 +89,7 @@ export async function openSettings(): Promise<void> {
 
   const dialog = dialogNamed("Settings");
   if (!(await dialog.isExisting())) {
-    await $('button[aria-label="Settings"]').click();
+    await $('//button[normalize-space(.)="Settings"]').click();
     await dialog.waitForDisplayed();
   }
 }
@@ -153,7 +153,7 @@ export function fieldLabelled(label: string) {
 }
 
 export function projectInSidebar(name: string) {
-  return $(`//nav[@aria-label="Projects"]//button[.//span[normalize-space(text())="${name}"]]`);
+  return $(`//nav[@aria-label="Workspace"]//button[@aria-label="${name}"]`);
 }
 
 export function columnNamed(name: string) {

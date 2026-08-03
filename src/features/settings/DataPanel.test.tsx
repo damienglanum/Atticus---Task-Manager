@@ -53,6 +53,7 @@ const PROJECT: Project = {
   nextTaskNumber: 1,
   directoryPath: null,
   directoryMissing: false,
+  mcpManaged: false,
   position: 0,
   archivedAt: null,
   createdAt: 0,

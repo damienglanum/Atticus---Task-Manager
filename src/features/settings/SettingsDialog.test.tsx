@@ -18,6 +18,9 @@ vi.mock("@/lib/ipc", () => ({
     importApply: vi.fn(),
     pickImportFile: vi.fn(),
     pickExportDestination: vi.fn(),
+    mcpSettingsGet: vi.fn(),
+    mcpSettingsSet: vi.fn(),
+    mcpLaunchConfig: vi.fn(),
   },
 }));
 
@@ -38,6 +41,15 @@ describe("SettingsDialog", () => {
       backupCount: 2,
     });
     vi.mocked(ipc.backupsList).mockResolvedValue([]);
+    vi.mocked(ipc.mcpSettingsGet).mockResolvedValue({
+      access: "read_only",
+      allowFileAttachments: false,
+    });
+    vi.mocked(ipc.mcpSettingsSet).mockImplementation((settings) => Promise.resolve(settings));
+    vi.mocked(ipc.mcpLaunchConfig).mockResolvedValue({
+      command: "/Applications/Atticus.app/Contents/MacOS/Atticus",
+      args: ["--mcp"],
+    });
   });
 
   it("separates general, data, and installation settings", async () => {
@@ -60,6 +72,14 @@ describe("SettingsDialog", () => {
     await user.click(screen.getByRole("button", { name: "Data" }));
     expect(screen.getByText("Export and import")).toBeInTheDocument();
     expect(screen.queryByText("Appearance")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "AI access" }));
+    expect(await screen.findByText("Workflow rules included")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Read only/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("--mcp")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "About" }));
     expect(await screen.findByText("Installation details")).toBeInTheDocument();

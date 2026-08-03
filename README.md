@@ -140,6 +140,21 @@ gh secret set TAURI_SIGNING_PRIVATE_KEY < .updater-keys/atticus.key
 Only the public verification key is committed in `src-tauri/tauri.conf.json`. Losing or replacing
 the private key breaks the update path for already installed copies, so keep an encrypted backup.
 
+## AI access through MCP
+
+Atticus includes a permissioned local MCP server in the same application executable. Enable it in
+**Settings → AI access**, then add the command shown there to Codex, Claude, or another MCP client
+with the `--mcp` argument. Read/write access is confined to projects the MCP created itself, shown
+under the collapsible **AI Boards** sidebar section. Existing and user-created projects remain
+write-protected even if the AI knows their IDs. Inside that sandbox it can create or update boards,
+columns, tasks, descriptions, subtasks, labels, links, guarded file references, and task status.
+Destructive tools are not exposed.
+
+The server attaches workflow instructions to every connection so the AI inspects before writing,
+moves real work to **In Progress**, keeps focus-mode details current, and moves it to **Done** only
+after verification succeeds. See [`docs/mcp.md`](docs/mcp.md) for setup, permissions, the tool list,
+and the boundary between session-driven updates and a persistent background agent.
+
 ## Where your data lives
 
 ```
@@ -181,6 +196,7 @@ database first, so a restore is itself reversible.
 | [`docs/design-decisions.md`](docs/design-decisions.md) | The three visual directions and why "Ledger" was chosen |
 | [`docs/milestones.md`](docs/milestones.md) | The milestones and their acceptance criteria |
 | [`docs/testing.md`](docs/testing.md) | What each test layer may honestly claim, and how to run it |
+| [`docs/mcp.md`](docs/mcp.md) | Local AI access, permissions, workflow rules, and MCP tools |
 | [`docs/visual-review.md`](docs/visual-review.md) | States rendered and looked at, with defects found |
 | [`docs/shortcuts.md`](docs/shortcuts.md) | Every keyboard route, and the ones that do not exist yet |
 | [`docs/adr/`](docs/adr/) | Decision records for the choices that are expensive to reverse |

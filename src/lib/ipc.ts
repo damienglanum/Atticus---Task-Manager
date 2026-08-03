@@ -26,6 +26,8 @@ import type { FileRef } from "./bindings/FileRef";
 import type { Label } from "./bindings/Label";
 import type { LabelInput } from "./bindings/LabelInput";
 import type { LinkRef } from "./bindings/LinkRef";
+import type { McpLaunchConfig } from "./bindings/McpLaunchConfig";
+import type { McpSettings } from "./bindings/McpSettings";
 import type { MoveOutcome } from "./bindings/MoveOutcome";
 import type { SavedFilter } from "./bindings/SavedFilter";
 import type { SearchHit } from "./bindings/SearchHit";
@@ -75,6 +77,12 @@ export const ipc = {
   // `ui:` prefix in Rust, so this can never overwrite the workspace or theme.
   uiStateGet: (key: string) => call<string | null>("ui_state_get", { key }),
   uiStateSet: (key: string, value: string) => call<null>("ui_state_set", { key, value }),
+
+  mcpSettingsGet: () => call<McpSettings>("mcp_settings_get"),
+  mcpSettingsSet: (settings: McpSettings) => call<McpSettings>("mcp_settings_set", { settings }),
+  mcpRevisionGet: () => call<number>("mcp_revision_get"),
+  mcpLaunchConfig: () => call<McpLaunchConfig>("mcp_launch_config"),
+  mcpManagedBoardsList: () => call<Board[]>("mcp_managed_boards_list"),
 
   projectsList: (includeArchived: boolean) => call<Project[]>("projects_list", { includeArchived }),
   projectCreate: (input: NewProject) => call<ProjectCreated>("project_create", { input }),

@@ -54,6 +54,22 @@ pub fn list(conn: &Connection, project_id: &str) -> AppResult<Vec<Board>> {
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
+/// Every active board inside the isolated MCP workspace, ordered by project and
+/// then board. This powers the dedicated sidebar section without broadening the
+/// MCP server's permissions.
+pub fn list_mcp_managed(conn: &Connection) -> AppResult<Vec<Board>> {
+    let mut statement = conn.prepare(
+        "SELECT b.id, b.project_id, b.name, b.position, b.created_at, b.updated_at \
+         FROM boards b \
+         JOIN projects p ON p.id = b.project_id \
+         JOIN mcp_managed_projects m ON m.project_id = p.id \
+         WHERE p.archived_at IS NULL \
+         ORDER BY p.position, b.position",
+    )?;
+    let rows = statement.query_map([], row_to_board)?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
 pub fn find(conn: &Connection, id: &str) -> AppResult<Board> {
     conn.query_row(&format!("{SELECT} WHERE id = ?1"), [id], |row| {
         row_to_board(row)

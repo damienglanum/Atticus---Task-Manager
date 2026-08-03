@@ -13,10 +13,13 @@ import { ARTIFACT_DIR } from "../wdio.conf.js";
 import {
   addTaskTo,
   chooseMenuItem,
+  chooseOption,
   columnNamed,
   createProject,
+  dialogNamed,
   fieldLabelled,
   openMenu,
+  openSettings,
   openTaskMenu,
   setViewportWidth,
   waitForAppReady,
@@ -146,7 +149,7 @@ describe("visual review", () => {
 
   it("leaves the columns their own width on a 1920 display", async () => {
     // The third of the three widths milestone 8 requires inspecting. A fixed
-    // 300 px column is the point of the design, so the check is that the extra
+    // 320 px column is the point of the design, so the check is that the extra
     // room becomes empty space rather than five very wide columns.
     await setViewportWidth(1920, 1080);
     await resetBoardScroll();
@@ -156,7 +159,7 @@ describe("visual review", () => {
       section.getSize("width"),
     );
     expect(new Set(widths).size).toBe(1);
-    expect(widths[0]).toBeLessThanOrEqual(300);
+    expect(widths[0]).toBeLessThanOrEqual(320);
 
     await shoot("board-1920");
   });
@@ -190,7 +193,7 @@ describe("visual review", () => {
 
     await openTaskMenu("Accessible keyboard drag-and-drop");
     await chooseMenuItem("Open");
-    const dialog = $('div[role="dialog"]');
+    const dialog = dialogNamed("Edit task");
     await dialog.waitForDisplayed();
 
     await dialog
@@ -200,23 +203,23 @@ describe("visual review", () => {
       );
 
     for (const step of ["Pointer sensor", "Keyboard sensor", "Menu commands"]) {
-      const field = dialog.$('input[aria-label="New subtask"]');
+      const field = dialog.$('input[aria-label="Add a new checklist item"]');
       await field.setValue(step);
       await browser.keys("Enter");
     }
-    await dialog.$$('input[type="checkbox"]')[0]?.click();
+    await dialog.$('section[aria-labelledby="checklist-heading"] input[type="checkbox"]').click();
 
-    await dialog.$('//span[normalize-space(text())="High"]').click();
+    await chooseOption("#task-priority", "High");
     await dialog.$("#task-estimate").setValue("3h 30m");
 
-    await dialog.$("button=New label").click();
-    await dialog.$('input[aria-label="New label name"]').setValue("Accessibility");
-    await dialog.$("button=Add label").click();
-    await dialog.$('//label[.//span[normalize-space(text())="Accessibility"]]//input').click();
+    await dialog.$("button=Add tag").click();
+    await dialog.$('input[aria-label="Tag name"]').setValue("Accessibility");
+    await dialog.$("button=Add “Accessibility”").click();
+    await dialog.$('button[aria-label="Remove Accessibility"]').waitForDisplayed();
 
     await shoot("task-editor");
 
-    await browser.keys("Escape");
+    await dialog.$("button=Save changes").click();
     await dialog.waitForDisplayed({ reverse: true });
   });
 
@@ -274,11 +277,13 @@ describe("visual review", () => {
 
   it("photographs the light theme", async () => {
     await waitForAppReady();
-    await $('button[aria-label="Settings"]').click();
-    await $('div[role="dialog"]').waitForDisplayed();
-    await $("label=Light").click();
+    await openSettings();
+    const settings = dialogNamed("Settings");
+    await settings.waitForDisplayed();
+    await settings.$("button=General").click();
+    await settings.$('//label[normalize-space(.)="Light"]').click();
     await browser.keys("Escape");
-    await $('div[role="dialog"]').waitForDisplayed({ reverse: true });
+    await settings.waitForDisplayed({ reverse: true });
 
     await setViewportWidth(1280, 820);
     await resetBoardScroll();

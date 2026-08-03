@@ -33,6 +33,11 @@ pub const MIGRATIONS: &[Migration] = &[
         description: "task web links",
         sql: include_str!("schema/m0003_link_refs.sql"),
     },
+    Migration {
+        version: 4,
+        description: "MCP-managed project boundary",
+        sql: include_str!("schema/m0004_mcp_managed_projects.sql"),
+    },
 ];
 
 /// The version this build knows how to produce.
@@ -156,8 +161,8 @@ mod tests {
     /// Product-spec §12.6 asks for "a migration from a prior-schema fixture".
     ///
     /// This is now the **real** upgrade: a database stood up at released schema
-    /// 1, populated through the ordinary commands so the rows are shaped the way
-    /// real rows are, then reopened by a build that knows schema 2. What is being
+    /// 1, populated against that released schema, then reopened by a build that
+    /// knows newer schemas. What is being
     /// tested is the part that can lose somebody's work — the version advances,
     /// every row survives, the newly added table is queryable, and a backup was
     /// taken before any of it happened.
@@ -166,41 +171,41 @@ mod tests {
         let directory = tempfile::tempdir().expect("temp dir");
         let path = directory.path().join(crate::db::DATABASE_FILE_NAME);
 
-        let task_id;
+        let task_id = "old-task".to_owned();
         {
-            // Opened at version 1 and populated through the ordinary commands, so
-            // the rows are shaped the way real rows are rather than hand-written.
-            let mut db = Database::open_with(&path, RELEASED_V1).expect("v1 opens");
+            // Current persistence helpers select fields added by current
+            // migrations, so an old-schema fixture is written with the SQL that
+            // old release actually supported rather than pretending current
+            // code could have run before its own migration.
+            let db = Database::open_with(&path, RELEASED_V1).expect("v1 opens");
             assert_eq!(current_version(db.connection()).expect("version"), 1);
 
-            let (project, board) = crate::db::projects::create(
-                db.connection_mut(),
-                crate::db::projects::NewProject {
-                    name: "Written before the upgrade".to_owned(),
-                    description: "Must survive it".to_owned(),
-                    color: "indigo".to_owned(),
-                    key_prefix: None,
-                    directory_path: None,
-                },
-            )
-            .expect("project");
-
-            let column = crate::db::columns::list(db.connection(), &board).expect("columns")[0]
-                .id
-                .clone();
-            let task = crate::db::tasks::create(
-                db.connection_mut(),
-                crate::db::tasks::NewTask {
-                    column_id: column,
-                    title: "An older task".to_owned(),
-                },
-            )
-            .expect("task");
-            task_id = task.id;
-
-            crate::db::subtasks::create(db.connection_mut(), &task_id, "An older subtask")
-                .expect("subtask");
-            assert_eq!(project.name, "Written before the upgrade");
+            db.connection()
+                .execute_batch(
+                    "INSERT INTO projects
+                       (id, name, description, color, key_prefix, next_task_number,
+                        position, created_at, updated_at)
+                     VALUES
+                       ('old-project', 'Written before the upgrade', 'Must survive it',
+                        'indigo', 'WRI', 2, 0, 1, 1);
+                     INSERT INTO boards
+                       (id, project_id, name, position, created_at, updated_at)
+                     VALUES ('old-board', 'old-project', 'Board', 0, 1, 1);
+                     INSERT INTO board_columns
+                       (id, board_id, name, position, created_at, updated_at)
+                     VALUES ('old-column', 'old-board', 'Todo', 0, 1, 1);
+                     INSERT INTO tasks
+                       (id, project_id, board_id, column_id, number, title,
+                        position, created_at, updated_at)
+                     VALUES
+                       ('old-task', 'old-project', 'old-board', 'old-column', 1,
+                        'An older task', 0, 1, 1);
+                     INSERT INTO subtasks
+                       (id, task_id, title, position, created_at, updated_at)
+                     VALUES
+                       ('old-subtask', 'old-task', 'An older subtask', 0, 1, 1);",
+                )
+                .expect("released schema accepts its rows");
         }
 
         // Reopened against the released migration list: this is what a user gets
@@ -230,7 +235,15 @@ mod tests {
             .expect("subtasks");
         assert_eq!(subtasks, 1, "children survive the upgrade too");
 
-        // What schema 2 added exists and is readable, which is what makes this an
+        let upgraded_projects = crate::db::projects::list(db.connection(), true)
+            .expect("upgraded projects remain readable");
+        assert_eq!(upgraded_projects.len(), 1);
+        assert!(
+            !upgraded_projects[0].mcp_managed,
+            "an upgrade must never grant MCP write access to existing work"
+        );
+
+        // What a later schema added exists and is readable, which is what makes this an
         // upgrade rather than a no-op that happened to leave the data alone.
         let notes: i64 = db
             .connection()

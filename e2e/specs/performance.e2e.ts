@@ -9,7 +9,7 @@
  * release build is faster, so a measurement inside budget here is a
  * conservative result rather than a flattering one.
  */
-import { addTaskTo, createProject, waitForAppReady } from "../support/app.js";
+import { addTaskTo, createProject, dialogNamed, waitForAppReady } from "../support/app.js";
 
 interface Timing {
   /** `navigationStart` → the board being interactive, in milliseconds. */
@@ -100,10 +100,10 @@ describe("performance", () => {
     await addTaskTo("Backlog", "Watched for console noise");
     await $('//button[.//*[normalize-space(text())="Watched for console noise"]]').click();
 
-    const editor = $('div[role="dialog"]');
+    const editor = dialogNamed("Edit task");
     await editor.waitForDisplayed();
     await editor.$('textarea[aria-label="Edit description"]').setValue("Some description");
-    await browser.keys("Escape");
+    await editor.$("button=Save changes").click();
     await editor.waitForDisplayed({ reverse: true });
 
     const problems = await browser.execute(

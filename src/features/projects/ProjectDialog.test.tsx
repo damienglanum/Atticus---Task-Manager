@@ -15,6 +15,7 @@ const project: Project = {
   nextTaskNumber: 4,
   directoryPath: "/Users/damien/code/takenkanban",
   directoryMissing: false,
+  mcpManaged: false,
   position: 0,
   archivedAt: null,
   createdAt: 0,

@@ -8,7 +8,13 @@
  * a task. jsdom cannot either — it has no layout and no focus model. So those
  * three live here, against the built binary.
  */
-import { createProject, openMenuAt, pinWindow, waitForAppReady } from "../support/app.js";
+import {
+  createProject,
+  openMenuAt,
+  openSettings,
+  pinWindow,
+  waitForAppReady,
+} from "../support/app.js";
 
 /** WCAG 2.2 SC 2.5.8. The design raises it to 32 for anything primary. */
 const MINIMUM_TARGET = 24;
@@ -216,9 +222,9 @@ describe("accessibility", () => {
       (window as unknown as Record<string, unknown>).__themeSwitchWitness = "alive";
     });
 
-    await $('button[aria-label="Settings"]').click();
-    await $('//div[@role="dialog"][.//*[normalize-space(text())="Settings"]]').waitForDisplayed();
-    await $("label=Light").click();
+    await openSettings();
+    await $('//div[@role="dialog"]//button[normalize-space(.)="General"]').click();
+    await $('//div[@role="dialog"]//label[normalize-space(.)="Light"]').click();
 
     // The class is written by an effect that runs after the preference query
     // settles, so it arrives a frame or two later. Waiting for it is the point —
