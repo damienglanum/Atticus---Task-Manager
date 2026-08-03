@@ -25,6 +25,7 @@ import type { ColumnSettings } from "./bindings/ColumnSettings";
 import type { FileRef } from "./bindings/FileRef";
 import type { Label } from "./bindings/Label";
 import type { LabelInput } from "./bindings/LabelInput";
+import type { LinkRef } from "./bindings/LinkRef";
 import type { MoveOutcome } from "./bindings/MoveOutcome";
 import type { SavedFilter } from "./bindings/SavedFilter";
 import type { SearchHit } from "./bindings/SearchHit";
@@ -45,6 +46,7 @@ import type { NewTask } from "./bindings/NewTask";
 import type { Task } from "./bindings/Task";
 import type { TaskPatch } from "./bindings/TaskPatch";
 import type { ThemePreference } from "./bindings/ThemePreference";
+import type { UpdateChannel } from "./bindings/UpdateChannel";
 import type { UndoRecord } from "./bindings/UndoRecord";
 import type { Workspace } from "./bindings/Workspace";
 import { IpcError, toAppError } from "./errors";
@@ -65,6 +67,8 @@ export const ipc = {
   preferencesGet: () => call<Preferences>("preferences_get"),
   preferencesSetTheme: (theme: ThemePreference) =>
     call<Preferences>("preferences_set_theme", { theme }),
+  preferencesSetUpdateChannel: (updateChannel: UpdateChannel) =>
+    call<Preferences>("preferences_set_update_channel", { updateChannel }),
   // The titlebar is drawn by macOS from the window's own theme, not from the
   // web contents. See `window_set_theme` in Rust.
   windowSetTheme: (theme: ResolvedTheme) => call<null>("window_set_theme", { theme }),
@@ -143,6 +147,9 @@ export const ipc = {
   fileRefsVerify: (taskId: string) => call<FileRef[]>("file_refs_verify", { taskId }),
   // Reveals in Finder by reference id — the path never crosses from the webview.
   fileRefReveal: (id: string) => call<null>("file_ref_reveal", { id }),
+
+  linkRefAdd: (taskId: string, url: string) => call<LinkRef>("link_ref_add", { taskId, url }),
+  linkRefRemove: (id: string) => call<null>("link_ref_remove", { id }),
 
   /**
    * Opens a link in the system browser.

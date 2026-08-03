@@ -1,0 +1,19 @@
+{
+  "exportVersion": 3,
+  "generatedAt": "2026-08-03T00:00:00.000Z",
+  "app": "atticus",
+  "appVersion": "0.1.0",
+  "data": {
+    "projects": [],
+    "boards": [],
+    "columns": [],
+    "tasks": [],
+    "subtasks": [],
+    "labels": [],
+    "taskLabels": [],
+    "fileRefs": [],
+    "linkRefs": [],
+    "savedFilters": [],
+    "notes": []
+  }
+}

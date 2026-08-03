@@ -37,6 +37,7 @@ function plan(partial: Partial<ImportPlan> = {}): ImportPlan {
     subtasks: 0,
     labels: 0,
     fileRefs: 0,
+    linkRefs: 0,
     savedFilters: 0,
     notes: 0,
     ...partial,

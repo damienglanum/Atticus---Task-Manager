@@ -13,6 +13,7 @@ pub mod export;
 pub mod file_refs;
 pub mod import;
 pub mod labels;
+pub mod link_refs;
 pub mod migrations;
 pub mod notes;
 pub mod ordering;

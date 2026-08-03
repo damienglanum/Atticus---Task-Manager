@@ -196,6 +196,19 @@
   --project-red: var(--red-9);
   --project-plum: var(--plum-9);
 
+  /* Label pills use the same hues at a tinted step. Their text stays readable
+     and the whole pill carries the chosen colour instead of only a tiny dot. */
+  --label-slate: var(--slate-4);
+  --label-indigo: var(--indigo-4);
+  --label-blue: var(--blue-4);
+  --label-cyan: var(--cyan-4);
+  --label-teal: var(--teal-4);
+  --label-grass: var(--grass-4);
+  --label-amber: var(--amber-4);
+  --label-orange: var(--orange-4);
+  --label-red: var(--red-4);
+  --label-plum: var(--plum-4);
+
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 

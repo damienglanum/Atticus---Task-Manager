@@ -25,13 +25,19 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // The window opens whether or not the database did. A failed start is
             // reported through the normal command path so the UI can render a
             // recovery screen naming the backup, rather than the process dying
             // with the user's data unexplained.
-            let state = match open_database(app.handle()) {
-                Ok(database) => AppState::ready(database),
+            let (state, update_channel) = match open_database(app.handle()) {
+                Ok(database) => {
+                    let update_channel =
+                        commands::preferences::read_update_channel(database.connection())
+                            .unwrap_or_default();
+                    (AppState::ready(database), update_channel)
+                }
                 Err(error) => {
                     eprintln!("startup: could not open the database: {error}");
                     // The path is resolved again rather than carried out of the
@@ -41,11 +47,12 @@ pub fn run() {
                     let path = resolve_data_dir(app.handle())
                         .ok()
                         .map(|dir| dir.join(DATABASE_FILE_NAME));
-                    AppState::failed(error, path)
+                    (AppState::failed(error, path), Default::default())
                 }
             };
             app.manage(state);
             app.manage(crate::commands::splash::SplashState::default());
+            app.manage(commands::updates::AutoUpdater::new(update_channel));
 
             // The end-to-end harness pins the `main` window by label and drives
             // it directly. A second window that is briefly in front of it, and a
@@ -73,6 +80,9 @@ pub fn run() {
                 fit_to_work_area(&window);
             }
 
+            #[cfg(not(feature = "e2e-webdriver"))]
+            commands::updates::start(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -86,6 +96,7 @@ pub fn run() {
             commands::transfer::backup_restore,
             commands::preferences::preferences_get,
             commands::preferences::preferences_set_theme,
+            commands::preferences::preferences_set_update_channel,
             commands::preferences::window_set_theme,
             commands::preferences::ui_state_get,
             commands::preferences::ui_state_set,
@@ -134,6 +145,8 @@ pub fn run() {
             commands::detail::file_ref_remove,
             commands::detail::file_refs_verify,
             commands::detail::file_ref_reveal,
+            commands::detail::link_ref_add,
+            commands::detail::link_ref_remove,
             commands::splash::splash_animation_finished,
             commands::splash::app_ready,
             commands::notes::notes_list,

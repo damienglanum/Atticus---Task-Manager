@@ -7,6 +7,7 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
 const THEME_KEY: &str = "theme";
+const UPDATE_CHANNEL_KEY: &str = "update_channel";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -15,6 +16,15 @@ pub enum ThemePreference {
     Light,
     Dark,
     System,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "UpdateChannel.ts")]
+pub enum UpdateChannel {
+    Dev,
+    #[default]
+    Main,
 }
 
 /// A preference with "system" already decided.
@@ -45,13 +55,26 @@ impl From<ResolvedTheme> for tauri::Theme {
 #[ts(export, export_to = "Preferences.ts")]
 pub struct Preferences {
     pub theme: ThemePreference,
+    pub update_channel: UpdateChannel,
+}
+
+fn read_preferences(state: &AppState) -> AppResult<Preferences> {
+    let database = state.database()?;
+    let theme = app_state::get_or(database.connection(), THEME_KEY, ThemePreference::System)?;
+    let update_channel = read_update_channel(database.connection())?;
+    Ok(Preferences {
+        theme,
+        update_channel,
+    })
+}
+
+pub(crate) fn read_update_channel(connection: &rusqlite::Connection) -> AppResult<UpdateChannel> {
+    app_state::get_or(connection, UPDATE_CHANNEL_KEY, UpdateChannel::default())
 }
 
 #[tauri::command]
 pub fn preferences_get(state: State<'_, AppState>) -> AppResult<Preferences> {
-    let database = state.database()?;
-    let theme = app_state::get_or(database.connection(), THEME_KEY, ThemePreference::System)?;
-    Ok(Preferences { theme })
+    read_preferences(&state)
 }
 
 #[tauri::command]
@@ -61,7 +84,22 @@ pub fn preferences_set_theme(
 ) -> AppResult<Preferences> {
     let database = state.database()?;
     app_state::set(database.connection(), THEME_KEY, &theme)?;
-    Ok(Preferences { theme })
+    drop(database);
+    read_preferences(&state)
+}
+
+#[tauri::command]
+pub fn preferences_set_update_channel(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    update_channel: UpdateChannel,
+) -> AppResult<Preferences> {
+    let database = state.database()?;
+    app_state::set(database.connection(), UPDATE_CHANNEL_KEY, &update_channel)?;
+    drop(database);
+
+    crate::commands::updates::set_channel(&app, update_channel);
+    read_preferences(&state)
 }
 
 /// Repaints the window chrome to match the theme the interface is drawing.
@@ -151,6 +189,32 @@ mod tests {
                 .expect("read should succeed");
 
         assert_eq!(theme, ThemePreference::System);
+    }
+
+    #[test]
+    fn updates_default_to_the_main_channel() {
+        let db = Database::open_in_memory().expect("database opens");
+
+        let channel = read_update_channel(db.connection()).expect("read should succeed");
+
+        assert_eq!(channel, UpdateChannel::Main);
+    }
+
+    #[test]
+    fn a_chosen_update_channel_survives_a_reopen_of_the_same_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join(crate::db::DATABASE_FILE_NAME);
+
+        {
+            let db = Database::open(&path).expect("database opens");
+            app_state::set(db.connection(), UPDATE_CHANNEL_KEY, &UpdateChannel::Dev)
+                .expect("write should succeed");
+        }
+
+        let reopened = Database::open(&path).expect("database reopens");
+        let channel = read_update_channel(reopened.connection()).expect("read should succeed");
+
+        assert_eq!(channel, UpdateChannel::Dev);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Task detail: subtasks, labels, and file references.
+//! Task detail: subtasks, labels, file references, and web links.
 
 use serde::Serialize;
 use tauri::State;
@@ -6,6 +6,7 @@ use ts_rs::TS;
 
 use crate::db::file_refs::{self, FileRef};
 use crate::db::labels::{self, Label, LabelInput};
+use crate::db::link_refs::{self, LinkRef};
 use crate::db::subtasks::{self, Subtask, SubtaskPatch};
 use crate::db::tasks::{self, Task};
 use crate::db::undo::UndoToken;
@@ -29,6 +30,7 @@ pub struct TaskDetail {
     pub file_refs: Vec<FileRef>,
     /// The project's labels, so the picker needs no second call.
     pub available_labels: Vec<Label>,
+    pub link_refs: Vec<LinkRef>,
 }
 
 #[tauri::command]
@@ -42,6 +44,7 @@ pub fn task_detail(state: State<'_, AppState>, id: String) -> AppResult<TaskDeta
         subtasks: subtasks::list(conn, &id)?,
         label_ids: labels::for_task(conn, &id)?,
         file_refs: file_refs::verify_for_task(conn, &id)?,
+        link_refs: link_refs::list(conn, &id)?,
         available_labels: labels::list(conn, &task.project_id)?,
         task,
     })
@@ -198,4 +201,22 @@ pub fn file_ref_reveal(
     app.opener()
         .reveal_item_in_dir(&file_ref.path)
         .map_err(|error| crate::error::AppError::internal(format!("could not reveal: {error}")))
+}
+
+// --- Web links -------------------------------------------------------------
+
+#[tauri::command]
+pub fn link_ref_add(
+    state: State<'_, AppState>,
+    task_id: String,
+    url: String,
+) -> AppResult<LinkRef> {
+    let mut database = state.database()?;
+    link_refs::add(database.connection_mut(), &task_id, &url)
+}
+
+#[tauri::command]
+pub fn link_ref_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    let mut database = state.database()?;
+    link_refs::remove(database.connection_mut(), &id)
 }

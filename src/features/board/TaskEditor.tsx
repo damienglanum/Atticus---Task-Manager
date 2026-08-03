@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Copy,
   Eye,
+  ExternalLink,
   FileSearch,
   FileText,
   FolderOpen,
@@ -27,13 +28,14 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { DialogPage } from "@/components/ui/Dialog";
 import { MenuContent, MenuItem, MenuSeparator } from "@/components/ui/Menu";
-import { colorVariable } from "@/features/projects/colors";
+import { colorVariable, labelColorVariable } from "@/features/projects/colors";
 import type { Column } from "@/lib/bindings/Column";
 import type { Label } from "@/lib/bindings/Label";
 import { cn } from "@/lib/cn";
 import { messageFor } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
-import { LIMITS, PROJECT_COLORS } from "@/lib/schemas";
+import { normalizeWebUrl, webLinkName } from "@/lib/links";
+import { LIMITS, type ProjectColor } from "@/lib/schemas";
 
 import { describeDue, dueState, formatEstimate, parseEstimate } from "./dates";
 import { Markdown } from "./Markdown";
@@ -42,9 +44,11 @@ import {
   draftFrom,
   fileChanges,
   isDirty,
+  linkChanges,
   subtaskChanges,
   taskPatch,
   type DraftFile,
+  type DraftLink,
   type DraftSubtask,
   type TaskDraft,
 } from "./taskDraft";
@@ -117,7 +121,7 @@ export function TaskEditor({
       const patch = taskPatch(original, draft);
       if (patch !== null) await ipc.taskUpdate(taskId, patch);
 
-      // Order matters: the checklist and the files are separate rows, and a
+      // Order matters: the checklist, files, and links are separate rows, and a
       // failure part way through must not leave the task's own columns written
       // and its children not. There is no transaction across commands, so the
       // next best thing is to stop at the first error and say so, leaving the
@@ -140,6 +144,11 @@ export function TaskEditor({
       for (const change of fileChanges(original, draft)) {
         if (change.kind === "add") await ipc.fileRefAdd(taskId, change.path);
         else await ipc.fileRefRemove(change.id);
+      }
+
+      for (const change of linkChanges(original, draft)) {
+        if (change.kind === "add") await ipc.linkRefAdd(taskId, change.url);
+        else await ipc.linkRefRemove(change.id);
       }
 
       const labelsChanged =
@@ -257,8 +266,12 @@ export function TaskEditor({
 
             <AttachmentsPanel
               files={draft.files}
-              onChange={(files) => {
+              links={draft.links}
+              onFilesChange={(files) => {
                 update({ files });
+              }}
+              onLinksChange={(links) => {
+                update({ links });
               }}
             />
           </div>
@@ -279,7 +292,11 @@ export function TaskEditor({
                 update({ labelIds });
               }}
               onCreated={(label) => {
-                update({ labelIds: [...draft.labelIds, label.id] });
+                update({
+                  labelIds: draft.labelIds.includes(label.id)
+                    ? draft.labelIds
+                    : [...draft.labelIds, label.id],
+                });
                 void detail.refetch();
               }}
             />
@@ -621,10 +638,14 @@ function ChecklistPanel({
 
 function AttachmentsPanel({
   files,
-  onChange,
+  links,
+  onFilesChange,
+  onLinksChange,
 }: {
   files: DraftFile[];
-  onChange: (files: DraftFile[]) => void;
+  links: DraftLink[];
+  onFilesChange: (files: DraftFile[]) => void;
+  onLinksChange: (links: DraftLink[]) => void;
 }) {
   async function relocate(file: DraftFile) {
     if (file.id === null) return;
@@ -633,7 +654,7 @@ function AttachmentsPanel({
       if (path === null) return;
 
       const moved = await ipc.fileRefRelocate(file.id, path);
-      onChange(
+      onFilesChange(
         files.map((candidate) =>
           candidate.key === file.key
             ? {
@@ -650,13 +671,13 @@ function AttachmentsPanel({
     }
   }
 
-  async function link() {
+  async function linkFile() {
     try {
       const path = await ipc.pickFile();
       if (path === null) return;
 
       const displayName = path.split("/").pop() ?? path;
-      onChange([...files, { key: nextKey(), id: null, path, displayName, found: true }]);
+      onFilesChange([...files, { key: nextKey(), id: null, path, displayName, found: true }]);
     } catch (error) {
       notifyError(messageFor(error));
     }
@@ -666,114 +687,263 @@ function AttachmentsPanel({
     <section aria-labelledby="attachments-heading" className="space-y-2">
       <PanelHeading id="attachments-heading">Attachments</PanelHeading>
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        {files.map((file) => (
-          <div
-            key={file.key}
-            className={cn(
-              "flex items-center gap-3 rounded-lg border px-3 py-2.5",
-              file.found
-                ? "border-border-subtle bg-surface-column"
-                : "border-warning-border bg-warning-bg",
-            )}
-          >
-            <span
-              aria-hidden
-              className="bg-surface-sunken text-fg-secondary flex size-8 shrink-0 items-center justify-center rounded-md"
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-2">
+          <h4 className="text-fg-secondary text-2xs font-medium">Files</h4>
+          {files.map((file) => (
+            <div
+              key={file.key}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border px-3 py-2.5",
+                file.found
+                  ? "border-border-subtle bg-surface-column"
+                  : "border-warning-border bg-warning-bg",
+              )}
             >
-              <FileText size={15} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="text-fg-primary block truncate text-sm font-medium">
-                {file.displayName}
+              <span
+                aria-hidden
+                className="bg-surface-sunken text-fg-secondary flex size-8 shrink-0 items-center justify-center rounded-md"
+              >
+                <FileText size={15} />
               </span>
-              {/* The remembered path is shown either way. For a file that has
+              <span className="min-w-0 flex-1">
+                <span className="text-fg-primary block truncate text-sm font-medium">
+                  {file.displayName}
+                </span>
+                {/* The remembered path is shown either way. For a file that has
                   moved it is the only clue to where it went, so replacing it
                   with the warning would take away the one useful thing. */}
-              <span className="text-fg-secondary block truncate text-2xs" title={file.path}>
-                {file.path}
-              </span>
-              {file.found ? null : (
-                <span className="text-warning-fg block text-2xs">
-                  This file is not where it was
+                <span className="text-fg-secondary block truncate text-2xs" title={file.path}>
+                  {file.path}
                 </span>
-              )}
-            </span>
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <IconButton label={`Actions for ${file.displayName}`}>
-                  <MoreHorizontal size={14} aria-hidden />
-                </IconButton>
-              </DropdownMenu.Trigger>
+                {file.found ? null : (
+                  <span className="text-warning-fg block text-2xs">
+                    This file is not where it was
+                  </span>
+                )}
+              </span>
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <IconButton label={`Actions for ${file.displayName}`}>
+                    <MoreHorizontal size={14} aria-hidden />
+                  </IconButton>
+                </DropdownMenu.Trigger>
 
-              <DropdownMenu.Portal>
-                <MenuContent>
-                  {/*
+                <DropdownMenu.Portal>
+                  <MenuContent>
+                    {/*
                     Reveal and Locate act at once rather than waiting for Save.
                     Neither edits the task: one opens a Finder window, and the
                     other repairs a link to a file that has moved. Cancelling an
                     edit should not re-break a path the user just fixed.
                   */}
-                  {file.id === null || !file.found ? null : (
-                    // Absent for a file that is not there: revealing it would
-                    // open a Finder window on nothing and look like a failure.
+                    {file.id === null || !file.found ? null : (
+                      // Absent for a file that is not there: revealing it would
+                      // open a Finder window on nothing and look like a failure.
+                      <MenuItem
+                        onSelect={() => {
+                          void ipc.fileRefReveal(file.id ?? "").catch((error: unknown) => {
+                            notifyError(messageFor(error));
+                          });
+                        }}
+                      >
+                        <FolderOpen size={13} aria-hidden />
+                        Reveal in Finder
+                      </MenuItem>
+                    )}
+
+                    {file.found || file.id === null ? null : (
+                      <MenuItem
+                        onSelect={() => {
+                          void relocate(file);
+                        }}
+                      >
+                        <FileSearch size={13} aria-hidden />
+                        Locate this file…
+                      </MenuItem>
+                    )}
+
+                    <MenuSeparator />
                     <MenuItem
+                      destructive
                       onSelect={() => {
-                        void ipc.fileRefReveal(file.id ?? "").catch((error: unknown) => {
-                          notifyError(messageFor(error));
-                        });
+                        onFilesChange(files.filter((candidate) => candidate.key !== file.key));
                       }}
                     >
-                      <FolderOpen size={13} aria-hidden />
-                      Reveal in Finder
+                      <X size={13} aria-hidden />
+                      Remove
                     </MenuItem>
-                  )}
+                  </MenuContent>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            </div>
+          ))}
 
-                  {file.found || file.id === null ? null : (
-                    <MenuItem
-                      onSelect={() => {
-                        void relocate(file);
-                      }}
-                    >
-                      <FileSearch size={13} aria-hidden />
-                      Locate this file…
-                    </MenuItem>
-                  )}
-
-                  <MenuSeparator />
-                  <MenuItem
-                    destructive
-                    onSelect={() => {
-                      onChange(files.filter((candidate) => candidate.key !== file.key));
-                    }}
-                  >
-                    <X size={13} aria-hidden />
-                    Remove
-                  </MenuItem>
-                </MenuContent>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          </div>
-        ))}
-
-        {/*
+          {/*
           "Link", not "upload". Nothing is copied anywhere — Atticus records the
           path and the file stays exactly where you left it (ADR-0007). Calling
           the control Upload would promise a copy that does not exist, and the
           promise only fails much later, when the original is moved.
         */}
+          <button
+            type="button"
+            onClick={() => {
+              void linkFile();
+            }}
+            className="border-border-default text-fg-secondary hover:border-border-strong hover:text-fg-primary flex cursor-default items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-4 text-xs font-semibold tracking-[0.06em] uppercase"
+          >
+            <Paperclip size={14} aria-hidden />
+            Link files
+          </button>
+        </div>
+
+        <LinksColumn links={links} onChange={onLinksChange} />
+      </div>
+    </section>
+  );
+}
+
+function LinksColumn({
+  links,
+  onChange,
+}: {
+  links: DraftLink[];
+  onChange: (links: DraftLink[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function closeForm() {
+    setAdding(false);
+    setValue("");
+    setError(null);
+  }
+
+  function addLink() {
+    const url = normalizeWebUrl(value);
+    if (url === null) {
+      setError("Enter a valid web address, such as https://example.com.");
+      return;
+    }
+    if (links.some((link) => link.url === url)) {
+      setError("This link is already attached.");
+      return;
+    }
+
+    onChange([...links, { key: nextKey(), id: null, url }]);
+    closeForm();
+  }
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-fg-secondary text-2xs font-medium">Links</h4>
+
+      {links.map((link) => (
+        <div
+          key={link.key}
+          className="border-border-subtle bg-surface-column flex items-center gap-3 rounded-lg border px-3 py-2.5"
+        >
+          <span
+            aria-hidden
+            className="bg-surface-sunken text-fg-secondary flex size-8 shrink-0 items-center justify-center rounded-md"
+          >
+            <Link2 size={15} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="text-fg-primary block truncate text-sm font-medium">
+              {webLinkName(link.url)}
+            </span>
+            <span className="text-fg-secondary block truncate text-2xs" title={link.url}>
+              {link.url}
+            </span>
+          </span>
+
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <IconButton label={`Actions for ${webLinkName(link.url)}`}>
+                <MoreHorizontal size={14} aria-hidden />
+              </IconButton>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <MenuContent>
+                <MenuItem
+                  onSelect={() => {
+                    void ipc.openExternal(link.url).catch((openError: unknown) => {
+                      notifyError(messageFor(openError));
+                    });
+                  }}
+                >
+                  <ExternalLink size={13} aria-hidden />
+                  Open link
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem
+                  destructive
+                  onSelect={() => {
+                    onChange(links.filter((candidate) => candidate.key !== link.key));
+                  }}
+                >
+                  <X size={13} aria-hidden />
+                  Remove
+                </MenuItem>
+              </MenuContent>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </div>
+      ))}
+
+      {adding ? (
+        <form
+          className="border-border-subtle bg-surface-column space-y-2 rounded-lg border p-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            addLink();
+          }}
+        >
+          <input
+            ref={(element) => {
+              element?.focus();
+            }}
+            type="text"
+            inputMode="url"
+            value={value}
+            aria-label="Link URL"
+            aria-describedby={error === null ? undefined : "link-url-error"}
+            placeholder="https://example.com"
+            onChange={(event) => {
+              setValue(event.target.value);
+              setError(null);
+            }}
+            className="border-border-subtle bg-surface-card text-fg-primary placeholder:text-fg-secondary h-9 w-full rounded-lg border px-2.5 text-sm"
+          />
+          {error === null ? null : (
+            <p id="link-url-error" role="alert" className="text-danger-fg text-2xs">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" variant="primary">
+              Add link
+            </Button>
+            <Button type="button" size="sm" onClick={closeForm}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
         <button
           type="button"
           onClick={() => {
-            void link();
+            setAdding(true);
           }}
-          className="border-border-default text-fg-secondary hover:border-border-strong hover:text-fg-primary flex cursor-default items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-4 text-xs font-semibold tracking-[0.06em] uppercase"
+          className="border-border-default text-fg-secondary hover:border-border-strong hover:text-fg-primary flex w-full cursor-default items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-4 text-xs font-semibold tracking-[0.06em] uppercase"
         >
-          <Paperclip size={14} aria-hidden />
-          Link files
+          <Link2 size={14} aria-hidden />
+          Add link
         </button>
-      </div>
-    </section>
+      )}
+    </div>
   );
 }
 
@@ -1011,34 +1181,41 @@ function TagsPanel({
   onChange: (labelIds: string[]) => void;
   onCreated: (label: Label) => void;
 }) {
+  const tagColors = [
+    "slate",
+    "blue",
+    "teal",
+    "amber",
+    "red",
+    "plum",
+  ] as const satisfies readonly ProjectColor[];
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [color, setColor] = useState<ProjectColor>("blue");
   const [busy, setBusy] = useState(false);
 
   const chosen = selected
     .map((id) => available.find((label) => label.id === id))
     .filter((label): label is Label => label !== undefined);
-  const rest = available.filter((label) => !selected.includes(label.id));
 
   async function create() {
     const trimmed = name.trim();
     if (trimmed === "" || busy) return;
-
-    const existing = available.find((label) => label.name.toLowerCase() === trimmed.toLowerCase());
-    if (existing !== undefined) {
-      if (!selected.includes(existing.id)) onChange([...selected, existing.id]);
-      setName("");
-      setAdding(false);
-      return;
-    }
 
     setBusy(true);
     try {
       // Created immediately, unlike everything else in the editor. A label
       // belongs to the project rather than to this task, so Cancel has no
       // business deleting one that another task may already be using.
-      const color = PROJECT_COLORS[available.length % PROJECT_COLORS.length] ?? "slate";
-      const label = await ipc.labelCreate(projectId, { name: trimmed, color });
+      const existing = available.find(
+        (label) => label.name.toLowerCase() === trimmed.toLowerCase(),
+      );
+      const label =
+        existing === undefined
+          ? await ipc.labelCreate(projectId, { name: trimmed, color })
+          : existing.color === color
+            ? existing
+            : await ipc.labelUpdate(existing.id, { name: existing.name, color });
       onCreated(label);
       setName("");
       setAdding(false);
@@ -1057,7 +1234,11 @@ function TagsPanel({
         {chosen.map((label) => (
           <span
             key={label.id}
-            className="bg-surface-sunken text-fg-secondary inline-flex items-center gap-1.5 rounded-md py-0.5 pr-0.5 pl-1.5 text-2xs font-medium tracking-[0.06em] uppercase"
+            className="text-fg-secondary inline-flex items-center gap-1.5 rounded-md border py-0.5 pr-0.5 pl-1.5 text-2xs font-medium tracking-[0.06em] uppercase"
+            style={{
+              backgroundColor: labelColorVariable(label.color),
+              borderColor: colorVariable(label.color),
+            }}
           >
             <span
               aria-hidden
@@ -1082,6 +1263,7 @@ function TagsPanel({
           <button
             type="button"
             onClick={() => {
+              setColor(tagColors[available.length % tagColors.length] ?? "blue");
               setAdding(true);
             }}
             className="border-border-default text-fg-secondary hover:text-fg-primary inline-flex cursor-default items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5 text-2xs font-medium tracking-[0.06em] uppercase"
@@ -1121,32 +1303,47 @@ function TagsPanel({
             className={cn(FIELD, "placeholder:text-fg-secondary")}
           />
 
-          {rest.length === 0 ? null : (
-            <ul className="max-h-40 space-y-0.5 overflow-y-auto">
-              {rest
-                .filter((label) => label.name.toLowerCase().includes(name.trim().toLowerCase()))
-                .map((label) => (
-                  <li key={label.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onChange([...selected, label.id]);
-                        setName("");
-                        setAdding(false);
+          <fieldset className="m-0 border-0 p-0">
+            <legend className="text-fg-secondary mb-1.5 text-2xs font-medium">Tag colour</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {tagColors.map((option) => {
+                const selectedColor = option === color;
+                return (
+                  <label
+                    key={option}
+                    className={cn(
+                      "relative inline-flex size-7 cursor-default items-center justify-center rounded-md",
+                      "focus-within:outline-focus-ring focus-within:outline-2 focus-within:outline-offset-1",
+                      selectedColor
+                        ? "ring-border-strong ring-2"
+                        : "hover:ring-border-default hover:ring-1",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="tag-color"
+                      value={option}
+                      checked={selectedColor}
+                      onChange={() => {
+                        setColor(option);
                       }}
-                      className="text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary flex w-full cursor-default items-center gap-2 rounded px-1.5 py-1 text-left text-xs"
+                      className="sr-only"
+                    />
+                    <span className="sr-only">{option}</span>
+                    <span
+                      aria-hidden
+                      className="flex size-4 items-center justify-center rounded-full"
+                      style={{ backgroundColor: colorVariable(option) }}
                     >
-                      <span
-                        aria-hidden
-                        className="size-1.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: colorVariable(label.color) }}
-                      />
-                      {label.name}
-                    </button>
-                  </li>
-                ))}
-            </ul>
-          )}
+                      {selectedColor ? (
+                        <Check size={10} strokeWidth={3} className="text-white" />
+                      ) : null}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <Button
             size="sm"

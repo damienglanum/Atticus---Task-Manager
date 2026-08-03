@@ -1,4 +1,4 @@
-import { colorVariable } from "@/features/projects/colors";
+import { colorVariable, labelColorVariable } from "@/features/projects/colors";
 import type { Label } from "@/lib/bindings/Label";
 import { cn } from "@/lib/cn";
 
@@ -17,10 +17,14 @@ export function LabelChip({ label, className }: { label: Label; className?: stri
   return (
     <span
       className={cn(
-        "bg-surface-sunken text-fg-secondary inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5",
+        "text-fg-secondary inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 py-0.5",
         "text-2xs font-medium tracking-[0.06em] uppercase",
         className,
       )}
+      style={{
+        backgroundColor: labelColorVariable(label.color),
+        borderColor: colorVariable(label.color),
+      }}
     >
       <span
         aria-hidden

@@ -9,9 +9,9 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::domain::export_format::{
-    ExportBoard, ExportColumn, ExportData, ExportDocument, ExportFileRef, ExportLabel, ExportNote,
-    ExportProject, ExportSavedFilter, ExportSubtask, ExportTask, ExportTaskLabel,
-    CURRENT_EXPORT_VERSION, EXPORT_APP,
+    ExportBoard, ExportColumn, ExportData, ExportDocument, ExportFileRef, ExportLabel,
+    ExportLinkRef, ExportNote, ExportProject, ExportSavedFilter, ExportSubtask, ExportTask,
+    ExportTaskLabel, CURRENT_EXPORT_VERSION, EXPORT_APP,
 };
 use crate::error::AppResult;
 
@@ -50,6 +50,7 @@ pub fn export(
             labels: labels(conn, project_id)?,
             task_labels: task_labels(conn, project_id)?,
             file_refs: file_refs(conn, project_id)?,
+            link_refs: link_refs(conn, project_id)?,
             saved_filters: saved_filters(conn, project_id)?,
             notes: notes(conn, project_id)?,
         },
@@ -322,6 +323,30 @@ fn file_refs(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<Expor
     )
 }
 
+fn link_refs(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<ExportLinkRef>> {
+    const COLUMNS: &str = "l.id, l.task_id, l.url, l.position, l.created_at";
+
+    query(
+        conn,
+        &format!("SELECT {COLUMNS} FROM link_refs l ORDER BY l.task_id, l.position"),
+        &format!(
+            "SELECT {COLUMNS} FROM link_refs l \
+             JOIN tasks t ON t.id = l.task_id \
+             WHERE t.project_id = ?1 ORDER BY l.task_id, l.position"
+        ),
+        project_id,
+        |row| {
+            Ok(ExportLinkRef {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                url: row.get(2)?,
+                position: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        },
+    )
+}
+
 fn notes(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<ExportNote>> {
     const COLUMNS: &str = "id, project_id, title, body, position, created_at, updated_at";
 
@@ -372,7 +397,7 @@ mod tests {
     use crate::db::labels::LabelInput;
     use crate::db::projects::{self, NewProject};
     use crate::db::tasks::{self, NewTask};
-    use crate::db::{columns, labels, subtasks, Database};
+    use crate::db::{columns, labels, link_refs, subtasks, Database};
 
     struct Fixture {
         db: Database,
@@ -423,6 +448,10 @@ mod tests {
             .expect("task");
 
             subtasks::create(db.connection_mut(), &task.id, "A subtask").expect("subtask");
+            if task.project_id == first.id {
+                link_refs::add(db.connection_mut(), &task.id, "https://example.com/spec")
+                    .expect("link");
+            }
         }
 
         labels::create(
@@ -455,6 +484,7 @@ mod tests {
         assert_eq!(document.data.tasks.len(), 2);
         assert_eq!(document.data.subtasks.len(), 2);
         assert_eq!(document.data.labels.len(), 1);
+        assert_eq!(document.data.link_refs.len(), 1);
     }
 
     #[test]
@@ -475,6 +505,7 @@ mod tests {
         assert_eq!(document.data.tasks.len(), 1);
         assert_eq!(document.data.subtasks.len(), 1);
         assert_eq!(document.data.labels.len(), 1);
+        assert_eq!(document.data.link_refs.len(), 1);
 
         // The scoping assertion that actually bites: every row that carries a
         // project must carry *this* one, checked rather than counted.

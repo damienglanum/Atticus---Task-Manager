@@ -16,7 +16,7 @@ use ts_rs::TS;
 use crate::error::{AppError, AppResult};
 
 /// The shape this build writes, and the highest it can read.
-pub const CURRENT_EXPORT_VERSION: u32 = 2;
+pub const CURRENT_EXPORT_VERSION: u32 = 3;
 
 /// The application name written into the envelope, so a file that is obviously
 /// from somewhere else can be rejected by looking rather than by parsing.
@@ -55,6 +55,8 @@ pub struct ExportData {
     pub task_labels: Vec<ExportTaskLabel>,
     #[serde(default)]
     pub file_refs: Vec<ExportFileRef>,
+    #[serde(default)]
+    pub link_refs: Vec<ExportLinkRef>,
     #[serde(default)]
     pub saved_filters: Vec<ExportSavedFilter>,
     #[serde(default)]
@@ -201,6 +203,19 @@ pub struct ExportFileRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "ExportLinkRef.ts")]
+pub struct ExportLinkRef {
+    pub id: String,
+    pub task_id: String,
+    pub url: String,
+    #[ts(type = "number")]
+    pub position: i64,
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "ExportSavedFilter.ts")]
 pub struct ExportSavedFilter {
     pub id: String,
@@ -264,8 +279,9 @@ pub fn upgrade(document: serde_json::Value) -> AppResult<ExportDocument> {
     // only one released shape so far; the `match` is the shape the second one
     // slots into rather than a rewrite.
     let current = match version {
-        1 => v1_to_v2(document),
-        2 => document,
+        1 => v2_to_v3(v1_to_v2(document)),
+        2 => v2_to_v3(document),
+        3 => document,
         other => {
             return Err(AppError::validation(
                 "exportVersion",
@@ -294,6 +310,19 @@ fn v1_to_v2(mut document: serde_json::Value) -> serde_json::Value {
         .and_then(serde_json::Value::as_object_mut)
     {
         data.entry("notes")
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    }
+    document["exportVersion"] = serde_json::json!(2);
+    document
+}
+
+/// v2 → v3: task web links did not exist.
+fn v2_to_v3(mut document: serde_json::Value) -> serde_json::Value {
+    if let Some(data) = document
+        .get_mut("data")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        data.entry("linkRefs")
             .or_insert_with(|| serde_json::Value::Array(Vec::new()));
     }
     document["exportVersion"] = serde_json::json!(CURRENT_EXPORT_VERSION);

@@ -114,6 +114,30 @@ intermediate — a disk image is made from one — and then removed, so installi
 of the application rather than a loose bundle beside the image it came out of. The built application runs
 with no dev server and no network connection.
 
+## Automatic updates
+
+Settings → Automatic updates selects one of two signed release feeds:
+
+- **Main** follows builds published from the `main` branch.
+- **Development** follows every push to `dev` and may be less stable.
+
+A packaged release checks at launch, whenever the channel changes, and every 30 minutes while it
+is open. If a different signed version exists, Atticus installs it and restarts automatically.
+Debug executables deliberately do not self-update because replacing `target/debug` would interfere
+with the source build; install one release build first.
+
+`.github/workflows/publish-updates.yml` builds and publishes the matching channel automatically on
+every push. Its one-time repository setup is the updater private key, which is generated locally in
+the gitignored `.updater-keys/` directory:
+
+```bash
+gh auth login
+gh secret set TAURI_SIGNING_PRIVATE_KEY < .updater-keys/atticus.key
+```
+
+Only the public verification key is committed in `src-tauri/tauri.conf.json`. Losing or replacing
+the private key breaks the update path for already installed copies, so keep an encrypted backup.
+
 ## Where your data lives
 
 ```

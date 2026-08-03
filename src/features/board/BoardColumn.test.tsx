@@ -282,6 +282,9 @@ describe("BoardColumn", () => {
 
     expect(screen.getByText("one")).toBeInTheDocument();
     expect(screen.getByText("three")).toBeInTheDocument();
+    expect(screen.getByText("one").parentElement?.getAttribute("style")).toContain(
+      "background-color: var(--label-red)",
+    );
     expect(screen.queryByText("four")).not.toBeInTheDocument();
     // The hidden ones are named, not merely counted.
     expect(screen.getByLabelText("and 2 more: four, five")).toBeInTheDocument();

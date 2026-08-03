@@ -8,6 +8,7 @@ use crate::db::board_view;
 use crate::db::columns::{self, ColumnDisposition, ColumnSettings};
 use crate::db::file_refs;
 use crate::db::labels;
+use crate::db::link_refs;
 use crate::db::projects::{self, NewProject};
 use crate::db::saved_filters;
 use crate::db::search;
@@ -1051,7 +1052,7 @@ fn a_relocated_reference_points_at_the_new_file() {
 }
 
 #[test]
-fn deleting_a_task_takes_its_subtasks_labels_and_file_references_with_it() {
+fn deleting_a_task_takes_its_subtasks_labels_files_and_links_with_it() {
     let mut fixture = fixture();
     let project_id = project_of(&fixture);
     let task_id = fixture.add_task(0, "Task");
@@ -1078,14 +1079,26 @@ fn deleting_a_task_takes_its_subtasks_labels_and_file_references_with_it() {
         None,
     )
     .expect("add");
+    link_refs::add(
+        fixture.db.connection_mut(),
+        &task_id,
+        "https://example.com/spec",
+    )
+    .expect("link");
 
     let snapshot = tasks::delete(fixture.db.connection_mut(), &task_id).expect("delete");
 
     assert_eq!(snapshot.subtasks.len(), 1);
     assert_eq!(snapshot.label_ids.len(), 1);
     assert_eq!(snapshot.file_refs.len(), 1);
+    assert_eq!(snapshot.link_refs.len(), 1);
 
-    for (table, count) in [("subtasks", 0), ("task_labels", 0), ("file_refs", 0)] {
+    for (table, count) in [
+        ("subtasks", 0),
+        ("task_labels", 0),
+        ("file_refs", 0),
+        ("link_refs", 0),
+    ] {
         let remaining: i64 = fixture
             .db
             .connection()
@@ -1114,6 +1127,12 @@ fn deleting_a_task_takes_its_subtasks_labels_and_file_references_with_it() {
     assert_eq!(
         file_refs::list(fixture.db.connection(), &task_id)
             .expect("list")
+            .len(),
+        1
+    );
+    assert_eq!(
+        link_refs::list(fixture.db.connection(), &task_id)
+            .expect("links")
             .len(),
         1
     );

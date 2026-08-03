@@ -41,6 +41,7 @@ import { useUndoAcrossApp } from "./useUndoAcrossApp";
 import type { Board } from "@/lib/bindings/Board";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
+import type { UpdateChannel } from "@/lib/bindings/UpdateChannel";
 import { cn } from "@/lib/cn";
 import { describeAppError, toAppError } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
@@ -62,6 +63,7 @@ export function App() {
     queryFn: () => ipc.preferencesGet(),
   });
   const theme: ThemePreference = preferences.data?.theme ?? "system";
+  const updateChannel: UpdateChannel = preferences.data?.updateChannel ?? "main";
   useEffect(
     () =>
       applyThemePreference(theme, (resolved) => {
@@ -80,6 +82,16 @@ export function App() {
     },
     onError: (error: unknown) => {
       notifyError(`Couldn't save the theme. ${describeAppError(toAppError(error))}`);
+    },
+  });
+
+  const setUpdateChannel = useMutation({
+    mutationFn: (next: UpdateChannel) => ipc.preferencesSetUpdateChannel(next),
+    onSuccess: (updated) => {
+      client.setQueryData(queryKeys.preferences(), updated);
+    },
+    onError: (error: unknown) => {
+      notifyError(`Couldn't save the update channel. ${describeAppError(toAppError(error))}`);
     },
   });
 
@@ -466,6 +478,11 @@ export function App() {
           setTheme.mutate(next);
         }}
         themePending={setTheme.isPending}
+        updateChannel={updateChannel}
+        onUpdateChannelChange={(next) => {
+          setUpdateChannel.mutate(next);
+        }}
+        updateChannelPending={setUpdateChannel.isPending}
         projects={active}
         onDataReplaced={() => {
           // An import or a restore replaces the ids the workspace points at, so

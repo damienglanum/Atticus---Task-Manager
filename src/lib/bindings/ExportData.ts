@@ -3,6 +3,7 @@ import type { ExportBoard } from "./ExportBoard";
 import type { ExportColumn } from "./ExportColumn";
 import type { ExportFileRef } from "./ExportFileRef";
 import type { ExportLabel } from "./ExportLabel";
+import type { ExportLinkRef } from "./ExportLinkRef";
 import type { ExportNote } from "./ExportNote";
 import type { ExportProject } from "./ExportProject";
 import type { ExportSavedFilter } from "./ExportSavedFilter";
@@ -14,4 +15,4 @@ import type { ExportTaskLabel } from "./ExportTaskLabel";
  * Every record, in dependency order. Archived rows are included: an export that
  * silently dropped them would be a lossy backup wearing the word "export".
  */
-export type ExportData = { projects: Array<ExportProject>, boards: Array<ExportBoard>, columns: Array<ExportColumn>, tasks: Array<ExportTask>, subtasks: Array<ExportSubtask>, labels: Array<ExportLabel>, taskLabels: Array<ExportTaskLabel>, fileRefs: Array<ExportFileRef>, savedFilters: Array<ExportSavedFilter>, notes: Array<ExportNote>, };
+export type ExportData = { projects: Array<ExportProject>, boards: Array<ExportBoard>, columns: Array<ExportColumn>, tasks: Array<ExportTask>, subtasks: Array<ExportSubtask>, labels: Array<ExportLabel>, taskLabels: Array<ExportTaskLabel>, fileRefs: Array<ExportFileRef>, linkRefs: Array<ExportLinkRef>, savedFilters: Array<ExportSavedFilter>, notes: Array<ExportNote>, };

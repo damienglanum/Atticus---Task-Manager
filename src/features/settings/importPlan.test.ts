@@ -12,6 +12,7 @@ function plan(partial: Partial<ImportPlan>): ImportPlan {
     subtasks: 0,
     labels: 0,
     fileRefs: 0,
+    linkRefs: 0,
     savedFilters: 0,
     notes: 0,
     ...partial,
@@ -47,11 +48,12 @@ describe("describePlan", () => {
           subtasks: 1,
           labels: 1,
           fileRefs: 1,
+          linkRefs: 1,
           savedFilters: 1,
         }),
       ),
     ).toBe(
-      "1 project, 1 board, 1 column, 1 task, 1 subtask, 1 label, 1 file reference, 1 saved filter",
+      "1 project, 1 board, 1 column, 1 task, 1 subtask, 1 label, 1 file reference, 1 web link, 1 saved filter",
     );
   });
 });

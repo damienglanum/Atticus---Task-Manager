@@ -19,10 +19,14 @@ vi.mock("@/lib/ipc", () => ({
     taskSetLabels: vi.fn(),
     taskMove: vi.fn(),
     labelCreate: vi.fn(),
+    labelUpdate: vi.fn(),
     fileRefAdd: vi.fn(),
     fileRefRelocate: vi.fn(),
     fileRefRemove: vi.fn(),
     fileRefReveal: vi.fn(),
+    linkRefAdd: vi.fn(),
+    linkRefRemove: vi.fn(),
+    openExternal: vi.fn(),
     pickFile: vi.fn(),
   },
 }));
@@ -48,6 +52,7 @@ function detail(overrides: Partial<TaskDetail> = {}): TaskDetail {
     subtasks: [],
     labelIds: [],
     fileRefs: [],
+    linkRefs: [],
     availableLabels: [],
     ...overrides,
   };
@@ -59,6 +64,10 @@ const pickFile = vi.mocked(ipc.pickFile);
 const fileRefAdd = vi.mocked(ipc.fileRefAdd);
 const fileRefReveal = vi.mocked(ipc.fileRefReveal);
 const taskMove = vi.mocked(ipc.taskMove);
+const labelCreate = vi.mocked(ipc.labelCreate);
+const labelUpdate = vi.mocked(ipc.labelUpdate);
+const linkRefAdd = vi.mocked(ipc.linkRefAdd);
+const openExternal = vi.mocked(ipc.openExternal);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -256,6 +265,97 @@ describe("TaskEditor", () => {
     });
   });
 
+  it("creates a tag with the colour selected by the user", async () => {
+    labelCreate.mockResolvedValue({
+      id: "l1",
+      projectId: "p1",
+      name: "Blocked",
+      color: "red",
+      createdAt: 0,
+      updatedAt: 0,
+    });
+
+    const { user } = render();
+    await user.click(await screen.findByRole("button", { name: "Add tag" }));
+    await user.type(screen.getByLabelText("Tag name"), "Blocked");
+    await user.click(screen.getByRole("radio", { name: "red" }));
+    await user.click(screen.getByRole("button", { name: "Add “Blocked”" }));
+
+    await waitFor(() => {
+      expect(labelCreate).toHaveBeenCalledWith("p1", { name: "Blocked", color: "red" });
+    });
+  });
+
+  it("uses a selected tag's colour for the whole pill", async () => {
+    taskDetail.mockResolvedValue(
+      detail({
+        labelIds: ["l1"],
+        availableLabels: [
+          {
+            id: "l1",
+            projectId: "p1",
+            name: "Blocked",
+            color: "red",
+            createdAt: 0,
+            updatedAt: 0,
+          },
+        ],
+      }),
+    );
+
+    render();
+
+    expect((await screen.findByText("Blocked")).getAttribute("style")).toContain(
+      "background-color: var(--label-red)",
+    );
+  });
+
+  it("recolours an existing tag instead of silently reusing its old grey colour", async () => {
+    const oldLabel = {
+      id: "l1",
+      projectId: "p1",
+      name: "Blocked",
+      color: "slate",
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    taskDetail.mockResolvedValue(detail({ availableLabels: [oldLabel] }));
+    labelUpdate.mockResolvedValue({ ...oldLabel, color: "red" });
+
+    const { user } = render();
+    await user.click(await screen.findByRole("button", { name: "Add tag" }));
+    await user.type(screen.getByLabelText("Tag name"), "Blocked");
+    await user.click(screen.getByRole("radio", { name: "red" }));
+    await user.click(screen.getByRole("button", { name: "Add “Blocked”" }));
+
+    await waitFor(() => {
+      expect(labelUpdate).toHaveBeenCalledWith("l1", { name: "Blocked", color: "red" });
+    });
+    expect(labelCreate).not.toHaveBeenCalled();
+  });
+
+  it("does not show unused labels as tag history", async () => {
+    taskDetail.mockResolvedValue(
+      detail({
+        availableLabels: [
+          {
+            id: "l1",
+            projectId: "p1",
+            name: "Old tag",
+            color: "slate",
+            createdAt: 0,
+            updatedAt: 0,
+          },
+        ],
+      }),
+    );
+
+    const { user } = render();
+    await user.click(await screen.findByRole("button", { name: "Add tag" }));
+
+    expect(screen.queryByText("Old tag")).not.toBeInTheDocument();
+  });
+
   it("shows a missing file's path and offers to locate it", async () => {
     taskDetail.mockResolvedValue(
       detail({
@@ -349,5 +449,61 @@ describe("TaskEditor", () => {
       expect(pickFile).toHaveBeenCalled();
     });
     expect(fileRefAdd).not.toHaveBeenCalled();
+  });
+
+  it("stages a web link and persists it only when Save changes is pressed", async () => {
+    linkRefAdd.mockResolvedValue({
+      id: "w1",
+      taskId: "t1",
+      url: "https://example.com/docs",
+      position: 0,
+      createdAt: 0,
+    });
+
+    const { user } = render();
+    await user.click(await screen.findByRole("button", { name: "Add link" }));
+    await user.type(screen.getByLabelText("Link URL"), "example.com/docs");
+    await user.click(screen.getByRole("button", { name: "Add link" }));
+
+    expect(await screen.findByText("example.com")).toBeInTheDocument();
+    expect(linkRefAdd).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
+    await waitFor(() => {
+      expect(linkRefAdd).toHaveBeenCalledWith("t1", "https://example.com/docs");
+    });
+  });
+
+  it("rejects unsafe link schemes", async () => {
+    const { user } = render();
+    await user.click(await screen.findByRole("button", { name: "Add link" }));
+    await user.type(screen.getByLabelText("Link URL"), "file:///tmp/private");
+    await user.click(screen.getByRole("button", { name: "Add link" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Enter a valid web address");
+    expect(linkRefAdd).not.toHaveBeenCalled();
+  });
+
+  it("opens a stored link through the safe external-link boundary", async () => {
+    openExternal.mockResolvedValue(null);
+    taskDetail.mockResolvedValue(
+      detail({
+        linkRefs: [
+          {
+            id: "w1",
+            taskId: "t1",
+            url: "https://example.com/spec",
+            position: 0,
+            createdAt: 0,
+          },
+        ],
+      }),
+    );
+
+    const { user } = render();
+    await user.click(await screen.findByRole("button", { name: "Actions for example.com" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open link" }));
+
+    expect(openExternal).toHaveBeenCalledWith("https://example.com/spec");
   });
 });

@@ -19,6 +19,7 @@ pub const LABEL_NAME_MAX: usize = 40;
 pub const SAVED_FILTER_NAME_MAX: usize = 60;
 pub const NOTE_TITLE_MAX: usize = 200;
 pub const NOTE_BODY_MAX: usize = 200_000;
+pub const LINK_URL_MAX: usize = 2048;
 /// Highest priority level. The scale is fixed (US-15 AC1): None, Low, Medium,
 /// High, Urgent. Not user-editable, so it can carry a distinct glyph per level.
 pub const PRIORITY_MAX: i64 = 4;
@@ -73,6 +74,29 @@ pub fn color(field: &str, value: &str) -> AppResult<String> {
             format!("Choose one of: {}.", palette::COLORS.join(", ")),
         ))
     }
+}
+
+/// A web URL safe to hand to the operating system's browser.
+pub fn web_url(field: &str, value: &str) -> AppResult<String> {
+    let url = required_text(field, value, LINK_URL_MAX)?;
+    let remainder = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"));
+
+    let valid = remainder.is_some_and(|rest| {
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        !authority.is_empty()
+            && !authority.starts_with(':')
+            && !rest.chars().any(char::is_whitespace)
+    });
+    if !valid {
+        return Err(AppError::validation(
+            field,
+            "Use a complete http:// or https:// web address.",
+        ));
+    }
+
+    Ok(url)
 }
 
 /// A short human-readable project key, e.g. `KAN` in `KAN-14`.

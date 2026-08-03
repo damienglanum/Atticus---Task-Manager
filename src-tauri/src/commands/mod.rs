@@ -14,3 +14,4 @@ pub mod preferences;
 pub mod projects;
 pub mod splash;
 pub mod transfer;
+pub mod updates;

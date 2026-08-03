@@ -310,6 +310,13 @@ fn copy_children(tx: &Transaction<'_>, from_task: &str, to_task: &str) -> AppRes
         rusqlite::params![from_task, to_task],
     )?;
 
+    tx.execute(
+        "INSERT INTO link_refs (id, task_id, url, position, created_at) \
+         SELECT lower(hex(randomblob(16))), ?2, url, position, created_at \
+         FROM link_refs WHERE task_id = ?1",
+        rusqlite::params![from_task, to_task],
+    )?;
+
     Ok(())
 }
 
@@ -527,6 +534,7 @@ pub struct TaskSnapshot {
     pub subtasks: Vec<SubtaskRow>,
     pub label_ids: Vec<String>,
     pub file_refs: Vec<FileRefRow>,
+    pub link_refs: Vec<LinkRefRow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -557,6 +565,18 @@ pub struct FileRefRow {
     /// than recomputed so the board can show a missing file without touching
     /// the filesystem on every render.
     pub found: bool,
+    #[ts(type = "number")]
+    pub position: i64,
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "LinkRefRow.ts")]
+pub struct LinkRefRow {
+    pub id: String,
+    pub url: String,
     #[ts(type = "number")]
     pub position: i64,
     #[ts(type = "number")]
@@ -605,11 +625,27 @@ fn snapshot_one(conn: &Connection, task: &Task) -> AppResult<TaskSnapshot> {
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
+    let mut links = conn.prepare(
+        "SELECT id, url, position, created_at \
+         FROM link_refs WHERE task_id = ?1 ORDER BY position",
+    )?;
+    let link_refs = links
+        .query_map([&task.id], |row| {
+            Ok(LinkRefRow {
+                id: row.get("id")?,
+                url: row.get("url")?,
+                position: row.get("position")?,
+                created_at: row.get("created_at")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
     Ok(TaskSnapshot {
         task: task.clone(),
         subtasks: load_subtasks(conn, &task.id)?,
         label_ids,
         file_refs,
+        link_refs,
     })
 }
 
@@ -704,6 +740,20 @@ fn reinsert_at(tx: &Transaction<'_>, snapshot: &TaskSnapshot, position: i64) -> 
                 file_ref.found,
                 file_ref.position,
                 file_ref.created_at
+            ],
+        )?;
+    }
+
+    for link_ref in &snapshot.link_refs {
+        tx.execute(
+            "INSERT INTO link_refs (id, task_id, url, position, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                link_ref.id,
+                task.id,
+                link_ref.url,
+                link_ref.position,
+                link_ref.created_at
             ],
         )?;
     }

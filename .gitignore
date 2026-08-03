@@ -11,6 +11,10 @@ coverage
 src-tauri/target
 src-tauri/gen
 
+# Private key used to sign automatic updates. The public key is safe and lives
+# in tauri.conf.json; this directory must never be committed.
+.updater-keys/
+
 # End-to-end artefacts
 e2e/reports
 e2e/logs

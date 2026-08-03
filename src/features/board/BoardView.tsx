@@ -1,5 +1,4 @@
 import {
-  closestCorners,
   DndContext,
   DragOverlay,
   KeyboardSensor,
@@ -28,6 +27,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { ArchivePanel } from "./ArchivePanel";
 import { BoardColumn } from "./BoardColumn";
 import { boardAnnouncements, screenReaderInstructions } from "./dragAnnouncements";
+import { boardCollisionDetection } from "./dragCollision";
 import { FilterBar } from "./FilterBar";
 import { isFiltering, matches, parseFilter } from "./filter";
 import { SaveFilterDialog } from "./SaveFilterDialog";
@@ -392,7 +392,7 @@ export function BoardView({
       <div className="relative min-h-0 flex-1">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={boardCollisionDetection}
           accessibility={{
             screenReaderInstructions,
             announcements: boardAnnouncements(() => snapshot.data),

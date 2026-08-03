@@ -52,6 +52,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["dmg"],
     "category": "Productivity",
     "copyright": "",
@@ -66,6 +67,11 @@
     ],
     "macOS": {
       "minimumSystemVersion": "13.0"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJEM0JDRDIzQkU4QTg1MTMKUldRVGhZcStJODA3dmREU2J0ZG9Yajg0YUVqYzFsRHlJVHU1VWd3aC94Y3VTZllwV2ZaaGxzZisK"
     }
   },
   "mainBinaryName": "Atticus"

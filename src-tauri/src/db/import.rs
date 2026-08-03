@@ -86,6 +86,7 @@ pub fn apply(
         for table in [
             "task_labels",
             "file_refs",
+            "link_refs",
             "subtasks",
             "saved_filters",
             "notes",
@@ -313,6 +314,20 @@ fn write_children(
         )?;
     }
 
+    for link_ref in &data.link_refs {
+        tx.execute(
+            "INSERT INTO link_refs (id, task_id, url, position, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                new_id(),
+                IdMap::get(&ids.tasks, &link_ref.task_id, "task")?,
+                link_ref.url,
+                link_ref.position,
+                link_ref.created_at,
+            ],
+        )?;
+    }
+
     for note in &data.notes {
         tx.execute(
             "INSERT INTO notes (id, project_id, title, body, position, created_at, updated_at) \
@@ -355,7 +370,7 @@ mod tests {
     use crate::db::labels::LabelInput;
     use crate::db::projects::{self, NewProject};
     use crate::db::tasks::{self, NewTask};
-    use crate::db::{columns, labels, subtasks, Database};
+    use crate::db::{columns, labels, link_refs, subtasks, Database};
 
     fn count(db: &Database, table: &str) -> i64 {
         db.connection()
@@ -410,6 +425,7 @@ mod tests {
             std::slice::from_ref(&label.id),
         )
         .expect("label applied");
+        link_refs::add(db.connection_mut(), &task.id, "https://example.com/spec").expect("link");
 
         let document = export(db.connection(), &ExportScope::Everything, "0.1.0").expect("export");
 
@@ -430,6 +446,7 @@ mod tests {
         assert_eq!(count(&target, "tasks"), 1);
         assert_eq!(count(&target, "subtasks"), 1);
         assert_eq!(count(&target, "labels"), 1);
+        assert_eq!(count(&target, "link_refs"), 1);
         assert_eq!(
             count(&target, "task_labels"),
             1,

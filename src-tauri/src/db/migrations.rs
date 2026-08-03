@@ -28,6 +28,11 @@ pub const MIGRATIONS: &[Migration] = &[
         description: "notes",
         sql: include_str!("schema/m0002_notes.sql"),
     },
+    Migration {
+        version: 3,
+        description: "task web links",
+        sql: include_str!("schema/m0003_link_refs.sql"),
+    },
 ];
 
 /// The version this build knows how to produce.
@@ -204,7 +209,7 @@ mod tests {
 
         assert_eq!(
             current_version(db.connection()).expect("version"),
-            2,
+            latest_version(MIGRATIONS),
             "the schema version must advance"
         );
 
@@ -232,6 +237,12 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
             .expect("the added table is queryable");
         assert_eq!(notes, 0, "an upgrade adds the table empty, not populated");
+
+        let links: i64 = db
+            .connection()
+            .query_row("SELECT COUNT(*) FROM link_refs", [], |row| row.get(0))
+            .expect("the web-link table is queryable");
+        assert_eq!(links, 0, "an upgrade adds the table empty, not populated");
 
         // A pre-migration backup is the promise `docs/data-and-backups.md` §4
         // makes, and an upgrade over real data is exactly when it matters.

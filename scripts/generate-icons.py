@@ -6,12 +6,11 @@ that are checked in. Run it when the mark changes.
 
     python3 scripts/generate-icons.py
 
-Needs Pillow, and `iconutil` for the .icns (macOS only). Deliberately a
-generator rather than a hand-exported PNG, because the icon has the same problem
-the in-app mark does — eight contours are a smudge below about 56 px — and the
-fix is to draw *each size at its own ring count* rather than to downscale one
-image and hope. `iconutil` assembles those into a single .icns, which is exactly
-what the format is for.
+Needs Pillow. Deliberately a generator rather than a hand-exported PNG: the app
+icon always uses the same three-contour geometry as the 26 px sidebar mark, then
+draws each output size separately so its line weight survives at Dock and
+favicon scale. Those renders are packed directly into the multi-resolution
+.icns container.
 
 The geometry is read from `src/components/ui/logoContours.ts`, so the icon and
 the interface cannot disagree about what the mark is.
@@ -19,9 +18,9 @@ the interface cannot disagree about what the mark is.
 
 from __future__ import annotations
 
+import io
 import re
-import shutil
-import subprocess
+import struct
 import sys
 from pathlib import Path
 
@@ -34,8 +33,13 @@ ROOT = Path(__file__).resolve().parent.parent
 CONTOURS_TS = ROOT / "src" / "components" / "ui" / "logoContours.ts"
 ICONS = ROOT / "src-tauri" / "icons"
 
-BACKGROUND = (11, 12, 13, 255)  # #0b0c0d, the splash background
-STROKE = (222, 222, 222, 255)  # #dedede, the splash stroke
+# Match the dark sidebar treatment: a black tile with its bright cyan mark.
+# Combined with the sidebar's three-contour geometry, this remains distinct at
+# the 16–32 px sizes used by browser tabs and the Dock.
+BACKGROUND = (11, 12, 13, 255)  # #0b0c0d, the app's near-black
+STROKE = (76, 204, 230, 255)  # #4ccce6, dark-theme --color-accent-fg
+BACKGROUND_HEX = "#0b0c0d"
+STROKE_HEX = "#4ccce6"
 
 # macOS icons are not full-bleed: the artwork sits inside a rounded square with
 # a margin, and the system expects that margin to be part of the image.
@@ -45,6 +49,7 @@ CORNER = 0.225  # of the squircle's own side
 # a large box beside the other icons in the Dock — the squircle already supplies
 # the breathing room that the artwork does not need to supply again.
 MARK = 0.82
+SIDEBAR_RINGS = 3
 
 SUPERSAMPLE = 4
 
@@ -100,15 +105,6 @@ def flatten(path: str, steps: int = 96) -> list[tuple[float, float]]:
     return points
 
 
-def rings_for(mark_pixels: float) -> int:
-    """Mirrors `markGeometry` in logoContours.ts. Keep the two in step."""
-    if mark_pixels < 28:
-        return 3
-    if mark_pixels < 56:
-        return 5
-    return 8
-
-
 def target_stroke(mark_pixels: float) -> float:
     if mark_pixels < 28:
         return 1.3
@@ -130,7 +126,7 @@ def bounds(paths: list[str]) -> tuple[float, float, float, float]:
 
 
 def render(size: int, contours: list[str]) -> Image.Image:
-    """One icon, at one size, drawn at the ring count that survives it."""
+    """Draw the sidebar's simplified mark at one packaged-icon size."""
     scale = SUPERSAMPLE
     canvas = size * scale
 
@@ -146,8 +142,7 @@ def render(size: int, contours: list[str]) -> Image.Image:
     )
 
     mark_side = square * MARK
-    rings = rings_for(mark_side / scale)
-    used = contours[:rings]
+    used = contours[:SIDEBAR_RINGS]
 
     x0, y0, x1, y1 = bounds(used)
     art = max(x1 - x0, y1 - y0)
@@ -184,7 +179,7 @@ def write_favicon(contours: list[str]) -> None:
     beside a real one is a small, permanent papercut. Vector rather than PNG
     because it costs about a kilobyte and never needs a size decision.
 
-    Composed like the app icon, dark square and light contours, rather than as
+    Composed like the app icon, black square and blue contours, rather than as
     bare linework: a favicon sits on browser chrome that may be light or dark,
     and only the version carrying its own background reads on both.
     """
@@ -192,7 +187,7 @@ def write_favicon(contours: list[str]) -> None:
     inset = box * 0.03
     square = box - inset * 2
 
-    used = contours[:5]
+    used = contours[:SIDEBAR_RINGS]
     x0, y0, x1, y1 = bounds(used)
     art = max(x1 - x0, y1 - y0)
     factor = (square * MARK) / art
@@ -204,9 +199,9 @@ def write_favicon(contours: list[str]) -> None:
     stroke = 2.6 / factor  # ~2.6 px at 64, expressed in the artwork's units
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {box:.0f} {box:.0f}" role="img" aria-label="Atticus">
-  <rect x="{inset:.2f}" y="{inset:.2f}" width="{square:.2f}" height="{square:.2f}" rx="{square * CORNER:.2f}" fill="#0b0c0d" />
+  <rect x="{inset:.2f}" y="{inset:.2f}" width="{square:.2f}" height="{square:.2f}" rx="{square * CORNER:.2f}" fill="{BACKGROUND_HEX}" />
   <g transform="translate({box / 2 - cx * factor:.3f} {box / 2 - cy * factor:.3f}) scale({factor:.5f})">
-    <g fill="none" stroke="#dedede" stroke-width="{stroke:.2f}" stroke-linecap="round" stroke-linejoin="round">
+    <g fill="none" stroke="{STROKE_HEX}" stroke-width="{stroke:.2f}" stroke-linecap="round" stroke-linejoin="round">
 {paths}
     </g>
   </g>
@@ -217,6 +212,44 @@ def write_favicon(contours: list[str]) -> None:
     public.mkdir(exist_ok=True)
     (public / "favicon.svg").write_text(svg)
     print("  public/favicon.svg")
+
+
+def write_icns(contours: list[str]) -> None:
+    """Pack the per-size PNG renders into a macOS ICNS container."""
+    rendered: dict[int, bytes] = {}
+
+    def png(size: int) -> bytes:
+        if size not in rendered:
+            output = io.BytesIO()
+            render(size, contours).save(output, format="PNG")
+            rendered[size] = output.getvalue()
+        return rendered[size]
+
+    # The duplicate pixel sizes are intentional: ic11–ic14 identify Retina
+    # representations, while icp4–ic10 identify their standard-scale peers.
+    representations = [
+        ("icp4", 16),
+        ("icp5", 32),
+        ("icp6", 64),
+        ("ic07", 128),
+        ("ic08", 256),
+        ("ic09", 512),
+        ("ic10", 1024),
+        ("ic11", 32),
+        ("ic12", 64),
+        ("ic13", 256),
+        ("ic14", 512),
+    ]
+    chunks = [
+        kind.encode("ascii") + struct.pack(">I", len(payload) + 8) + payload
+        for kind, size in representations
+        for payload in [png(size)]
+    ]
+    body = b"".join(chunks)
+    (ICONS / "icon.icns").write_bytes(
+        b"icns" + struct.pack(">I", len(body) + 8) + body
+    )
+    print("  icon.icns")
 
 
 def main() -> None:
@@ -251,25 +284,7 @@ def main() -> None:
     )
     print("  icon.ico")
 
-    if shutil.which("iconutil") is None:
-        print("iconutil not found — skipping icon.icns (macOS only)")
-        return
-
-    iconset = ICONS / "atticus.iconset"
-    if iconset.exists():
-        shutil.rmtree(iconset)
-    iconset.mkdir()
-
-    for base in (16, 32, 128, 256, 512):
-        render(base, contours).save(iconset / f"icon_{base}x{base}.png")
-        render(base * 2, contours).save(iconset / f"icon_{base}x{base}@2x.png")
-
-    subprocess.run(
-        ["iconutil", "-c", "icns", str(iconset), "-o", str(ICONS / "icon.icns")],
-        check=True,
-    )
-    shutil.rmtree(iconset)
-    print("  icon.icns")
+    write_icns(contours)
 
 
 if __name__ == "__main__":

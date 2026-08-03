@@ -40,6 +40,8 @@ pub struct ImportPlan {
     #[ts(type = "number")]
     pub file_refs: usize,
     #[ts(type = "number")]
+    pub link_refs: usize,
+    #[ts(type = "number")]
     pub saved_filters: usize,
     #[ts(type = "number")]
     pub notes: usize,
@@ -75,6 +77,7 @@ fn plan(document: &ExportDocument) -> ImportPlan {
         subtasks: data.subtasks.len(),
         labels: data.labels.len(),
         file_refs: data.file_refs.len(),
+        link_refs: data.link_refs.len(),
         saved_filters: data.saved_filters.len(),
         notes: data.notes.len(),
     }
@@ -264,8 +267,8 @@ fn check_tasks(document: &ExportDocument, issues: &mut Vec<ImportIssue>) {
     }
 }
 
-/// Subtasks, labels, task-label links, file references and saved filters — all
-/// of which hang off a task, a project, or both.
+/// Subtasks, labels, task-label links, file references, web links and saved
+/// filters — all of which hang off a task, a project, or both.
 fn check_children(document: &ExportDocument, issues: &mut Vec<ImportIssue>) {
     let data = &document.data;
     let projects: HashSet<&str> = data.projects.iter().map(|p| p.id.as_str()).collect();
@@ -338,6 +341,26 @@ fn check_children(document: &ExportDocument, issues: &mut Vec<ImportIssue>) {
             issues.push(ImportIssue::new(
                 format!("data.fileRefs[{index}].path"),
                 "A file reference must have a path.",
+            ));
+        }
+    }
+
+    unique_ids(
+        data.link_refs.iter().map(|link| link.id.as_str()),
+        "linkRefs",
+        issues,
+    );
+    for (index, link) in data.link_refs.iter().enumerate() {
+        if !tasks.contains(link.task_id.as_str()) {
+            issues.push(ImportIssue::new(
+                format!("data.linkRefs[{index}].taskId"),
+                format!("No task with id {} is in this file.", link.task_id),
+            ));
+        }
+        if validate::web_url("url", &link.url).is_err() {
+            issues.push(ImportIssue::new(
+                format!("data.linkRefs[{index}].url"),
+                "A link must be a complete http:// or https:// web address.",
             ));
         }
     }

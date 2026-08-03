@@ -1,4 +1,5 @@
 import type { FileRef } from "@/lib/bindings/FileRef";
+import type { LinkRef } from "@/lib/bindings/LinkRef";
 import type { Subtask } from "@/lib/bindings/Subtask";
 import type { TaskDetail } from "@/lib/bindings/TaskDetail";
 import type { TaskPatch } from "@/lib/bindings/TaskPatch";
@@ -11,9 +12,9 @@ import type { TaskPatch } from "@/lib/bindings/TaskPatch";
  * Cancel that leaves your edits on disk is a lie — so the whole task now lives
  * in memory until you press Save.
  *
- * Everything the editor can change is in here, including subtasks and file
- * references, which are separate rows with their own commands. It would have
- * been far less code to leave those writing immediately and only buffer the
+ * Everything the editor can change is in here, including subtasks, file
+ * references, and web links, which are separate rows with their own commands.
+ * It would have been far less code to leave those writing immediately and only buffer the
  * task's own columns, and it would have made Cancel wrong for exactly the two
  * things a checklist is most used for: ticking something off, and undoing that.
  */
@@ -36,6 +37,13 @@ export interface DraftFile {
   found: boolean;
 }
 
+/** A web link in the draft. `id` is null until Save writes it. */
+export interface DraftLink {
+  key: string;
+  id: string | null;
+  url: string;
+}
+
 export interface TaskDraft {
   title: string;
   description: string;
@@ -46,6 +54,7 @@ export interface TaskDraft {
   labelIds: string[];
   subtasks: DraftSubtask[];
   files: DraftFile[];
+  links: DraftLink[];
 }
 
 export function draftFrom(detail: TaskDetail): TaskDraft {
@@ -59,6 +68,7 @@ export function draftFrom(detail: TaskDetail): TaskDraft {
     labelIds: [...detail.labelIds],
     subtasks: detail.subtasks.map(subtaskToDraft),
     files: detail.fileRefs.map(fileToDraft),
+    links: detail.linkRefs.map(linkToDraft),
   };
 }
 
@@ -76,6 +86,10 @@ function fileToDraft(fileRef: FileRef): DraftFile {
   };
 }
 
+function linkToDraft(linkRef: LinkRef): DraftLink {
+  return { key: linkRef.id, id: linkRef.id, url: linkRef.url };
+}
+
 /** True when the draft differs from what was loaded. Drives the dirty guard. */
 export function isDirty(original: TaskDraft, draft: TaskDraft): boolean {
   return (
@@ -87,7 +101,8 @@ export function isDirty(original: TaskDraft, draft: TaskDraft): boolean {
     original.columnId !== draft.columnId ||
     !sameSet(original.labelIds, draft.labelIds) ||
     subtaskChanges(original, draft).length > 0 ||
-    fileChanges(original, draft).length > 0
+    fileChanges(original, draft).length > 0 ||
+    linkChanges(original, draft).length > 0
   );
 }
 
@@ -185,6 +200,24 @@ export function fileChanges(original: TaskDraft, draft: TaskDraft): FileChange[]
   const kept = new Set(draft.files.map((file) => file.id));
   for (const file of original.files) {
     if (file.id !== null && !kept.has(file.id)) changes.push({ kind: "remove", id: file.id });
+  }
+
+  return changes;
+}
+
+export type LinkChange = { kind: "add"; url: string } | { kind: "remove"; id: string };
+
+/** What has to happen to web-link rows to make the draft true. */
+export function linkChanges(original: TaskDraft, draft: TaskDraft): LinkChange[] {
+  const changes: LinkChange[] = [];
+
+  for (const link of draft.links) {
+    if (link.id === null) changes.push({ kind: "add", url: link.url });
+  }
+
+  const kept = new Set(draft.links.map((link) => link.id));
+  for (const link of original.links) {
+    if (link.id !== null && !kept.has(link.id)) changes.push({ kind: "remove", id: link.id });
   }
 
   return changes;

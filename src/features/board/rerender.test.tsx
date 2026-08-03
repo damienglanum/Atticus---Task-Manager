@@ -119,6 +119,7 @@ const detail: TaskDetail = {
   subtasks: [],
   labelIds: [],
   fileRefs: [],
+  linkRefs: [],
   availableLabels: [],
 };
 

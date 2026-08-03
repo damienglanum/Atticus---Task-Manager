@@ -4,4 +4,4 @@
  * What an import *would* create, shown before the user commits to it
  * (product-spec §7.2: "will create 3 projects, 11 boards, 214 tasks").
  */
-export type ImportPlan = { projects: number, boards: number, columns: number, tasks: number, subtasks: number, labels: number, fileRefs: number, savedFilters: number, notes: number, };
+export type ImportPlan = { projects: number, boards: number, columns: number, tasks: number, subtasks: number, labels: number, fileRefs: number, linkRefs: number, savedFilters: number, notes: number, };

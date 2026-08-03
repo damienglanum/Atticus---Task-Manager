@@ -9,6 +9,7 @@
  * "No such file or directory" when it cannot find it.
  */
 import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,10 +43,24 @@ try {
   process.exit(1);
 }
 
+const env = { ...process.env, PATH };
+const localUpdaterKey = resolve(root, ".updater-keys", "atticus.key");
+if (
+  env.TAURI_SIGNING_PRIVATE_KEY === undefined &&
+  env.TAURI_SIGNING_PRIVATE_KEY_PATH === undefined &&
+  existsSync(localUpdaterKey)
+) {
+  // The bundler currently honours the key value but not the CLI's documented
+  // key-path variable. Read the ignored file into the child environment without
+  // ever printing or committing its contents.
+  env.TAURI_SIGNING_PRIVATE_KEY = readFileSync(localUpdaterKey, "utf8").trim();
+  env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??= "";
+}
+
 const child = spawn(command, args, {
   cwd,
   stdio: "inherit",
-  env: { ...process.env, PATH },
+  env,
   shell: process.platform === "win32",
 });
 

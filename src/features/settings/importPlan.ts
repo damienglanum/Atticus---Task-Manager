@@ -17,6 +17,7 @@ export function describePlan(plan: ImportPlan): string {
     [plan.subtasks, "subtask"],
     [plan.labels, "label"],
     [plan.fileRefs, "file reference"],
+    [plan.linkRefs, "web link"],
     [plan.savedFilters, "saved filter"],
   ];
 
