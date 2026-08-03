@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const release = join(root, "src-tauri", "target", "release");
-const binary = join(release, "atticus");
+const binary = join(release, "Atticus");
 
 const problems = [];
 
@@ -50,7 +50,7 @@ function contains(path, marker) {
 // A detector nobody has seen detect anything is not evidence. Run against the
 // end-to-end build, where the plugin *is* compiled in, every marker must fire.
 if (process.argv.includes("--verify-markers")) {
-  const e2eBinary = join(root, "src-tauri", "target", "e2e", "e2e", "atticus");
+  const e2eBinary = join(root, "src-tauri", "target", "e2e", "e2e", "Atticus");
   if (!existsSync(e2eBinary)) {
     console.error(`No e2e binary at ${e2eBinary}. Run \`npm run e2e\` first.`);
     process.exit(1);

@@ -8,12 +8,62 @@ captured).
 Capture method, for reproducibility:
 
 ```bash
-screencapture -x -o -l "$(./winid "$(pgrep -f 'target/debug/atticus')")" out.png
+screencapture -x -o -l "$(./winid "$(pgrep -f 'target/debug/Atticus')")" out.png
 ```
 
 `winid` is a six-line Swift helper that reads `CGWindowListCopyWindowInfo` and prints the id of the
 layer-0 window owned by a pid. It lives in the scratchpad, not the repository: it is a reviewer's
 tool, not part of the product.
+
+---
+
+## v1.1 — Icons, name, and editor controls · 2026-07-31
+
+Prompted by a screenshot of the real application, which is the first review on
+this page taken from the shipped app rather than a browser.
+
+### Changed on review
+
+- **V1.1-4 — The rail's controls were three shapes.** `select`, `input[type=date]`
+  and `input[type=text]` had different heights and radii because each was written
+  where it was needed. Now one `FIELD` shape, 36 px, matching the buttons.
+- **V1.1-5 — The selects were system controls.** macOS draws a filled
+  double-arrow in a tinted well. A perfectly good control, belonging to a
+  different design. Replaced with `appearance-none` and our own chevron.
+- **V1.1-6 — An empty due date showed a date.** Visible in the user's screenshot:
+  the field read `31-07-2026` while the caption under it read *No due date*.
+  WebKit fills an empty date input with today rather than drawing a placeholder,
+  which is the exact confusion M6 first recorded. The caption alone was not
+  enough — the field now hides its text while empty and unfocused, so it looks as
+  empty as it is, and shows the digits again on focus.
+- **V1.1-7 — "Markdown is supported." removed** from the description placeholder,
+  at the user's request. Anyone who has reached that field knows.
+- **V1.1-8 — The editor was too wide.** 72 rem put the description box at about
+  800 px, a very long measure for prose. Now 64 rem with an 18 rem rail.
+
+### Icon review
+
+Rendered a contact sheet at 16, 32, 64, 128 and 256 px with the per-size renders
+above a naive downscale of the 1024 master. The comparison is the whole argument
+for the generator: the downscaled row is mud at 32 and effectively blank at 16.
+
+**Corrected after the user saw it in the Dock.** Two faults, both only visible
+against other icons:
+
+- **The mark was too small.** It filled 0.60 of the squircle, which reads as a
+  small object in a large box beside neighbouring icons. Now 0.82. Checked by
+  measurement rather than by eye — counting ink outside the squircle mask at
+  each candidate value returned a constant 17 px for every one of them, which is
+  the squircle's own antialiased corner and not the artwork, so 0.82 is
+  comfortably inside its frame.
+- **The Dock said `atticus`.** See design-decisions.md §9: the binary target had
+  to be renamed, because `productName` never reaches a `tauri dev` process.
+
+### Superseded icon review
+
+Rendered a contact sheet at 16, 32, 64, 128 and 256 px with the per-size renders
+above a naive downscale of the 1024 master. The comparison is the whole argument
+for the generator: the downscaled row is mud at 32 and effectively blank at 16.
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Atticus - Task Manager",
+  "productName": "Atticus",
   "version": "0.1.0",
   "identifier": "nl.synaptica.takenkanban",
   "build": {
@@ -26,7 +26,7 @@
       },
       {
         "label": "main",
-        "title": "Atticus - Task Manager",
+        "title": "Atticus",
         "width": 1440,
         "height": 900,
         "minWidth": 900,
@@ -67,5 +67,6 @@
     "macOS": {
       "minimumSystemVersion": "13.0"
     }
-  }
+  },
+  "mainBinaryName": "Atticus"
 }

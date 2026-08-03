@@ -3,7 +3,7 @@
  *
  * The build is a separate step from `npm run build` and a separate target
  * directory from every other cargo invocation, because `tauri dev` and
- * `cargo build` write to `target/debug/atticus` and would otherwise
+ * `cargo build` write to `target/debug/Atticus` and would otherwise
  * overwrite the WebDriver-enabled binary between building it and running it —
  * which they did, silently, the first time this was set up.
  */
@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { pathWithCargo } from "./rust-toolchain.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const binary = join(root, "src-tauri", "target", "e2e", "e2e", "atticus");
+const binary = join(root, "src-tauri", "target", "e2e", "e2e", "Atticus");
 const passThrough = process.argv.slice(2);
 
 function run(command, args, options = {}) {

@@ -1,4 +1,4 @@
-# Atticus - Task Manager
+# Atticus
 
 A local-first Kanban task manager for running several personal software projects at once.
 
@@ -135,7 +135,7 @@ Setting `TAKENKANBAN_DATA_DIR` moves it.
 external disk, or an automated test run gets its own data without touching yours:
 
 ```bash
-TAKENKANBAN_DATA_DIR=~/Documents/kanban-work open -a "Atticus - Task Manager"
+TAKENKANBAN_DATA_DIR=~/Documents/kanban-work open -a "Atticus"
 ```
 
 ## Backups

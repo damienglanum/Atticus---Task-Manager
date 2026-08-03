@@ -7,6 +7,14 @@ edition = "2021"
 license = "MIT"
 publish = false
 
+[[bin]]
+# Capitalised deliberately. `tauri dev` runs this binary directly rather than a
+# bundle, and macOS labels the Dock tile with the executable's file name — so a
+# lower-case target here is a lower-case application name on screen, whatever
+# `productName` says. The bundle takes its name from `productName` either way.
+name = "Atticus"
+path = "src/main.rs"
+
 [lib]
 # The `_lib` suffix keeps the library name distinct from the binary name.
 name = "atticus_lib"

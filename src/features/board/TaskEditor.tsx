@@ -2,6 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Bold,
   Check,
+  ChevronDown,
   Copy,
   Eye,
   FileSearch,
@@ -231,7 +232,7 @@ export function TaskEditor({
           </>
         }
       >
-        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+        <div className="mx-auto grid max-w-5xl gap-8 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="min-w-0 space-y-6">
             <TitleField
               value={draft.title}
@@ -477,7 +478,6 @@ function DescriptionPanel({
             value={value}
             aria-label="Edit description"
             rows={9}
-            placeholder="Markdown is supported."
             onChange={(event) => {
               onChange(event.target.value);
             }}
@@ -777,8 +777,55 @@ function AttachmentsPanel({
   );
 }
 
-const SELECT_CLASS =
-  "border-border-subtle bg-surface-card text-fg-primary w-full rounded-md border px-2 py-1.5 text-sm";
+/**
+ * The shape every control in the rail shares.
+ *
+ * They were three different heights and two different radii, because each was
+ * written where it was needed. In a 18rem column stacked four deep that reads as
+ * a list of unrelated widgets rather than as one panel.
+ */
+const FIELD =
+  "border-border-subtle bg-surface-card text-fg-primary h-9 w-full rounded-lg border px-2.5 text-sm";
+
+/**
+ * A select that looks like the rest of the application.
+ *
+ * `appearance-none` and our own chevron. The native macOS control draws a filled
+ * double-arrow in a tinted well, which is a perfectly good control and belongs
+ * to a different design — beside our own inputs it reads as something the page
+ * does not own. The wrapper is what gives the chevron somewhere to sit.
+ */
+function Select({
+  id,
+  value,
+  onChange,
+  children,
+}: {
+  id: string;
+  value: string | number;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <select
+        id={id}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+        }}
+        className={cn(FIELD, "cursor-default appearance-none pr-8")}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        size={14}
+        aria-hidden
+        className="text-fg-secondary pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2"
+      />
+    </div>
+  );
+}
 
 function MetadataPanel({
   draft,
@@ -838,40 +885,38 @@ function MetadataPanel({
           A task's status *is* the column it sits in — there is no second field
           that could disagree with the board. Changing it here moves the card.
         */}
-        <select
+        <Select
           id="task-status"
           value={draft.columnId}
-          onChange={(event) => {
-            onChange({ columnId: event.target.value });
+          onChange={(columnId) => {
+            onChange({ columnId });
           }}
-          className={SELECT_CLASS}
         >
           {columns.map((column) => (
             <option key={column.id} value={column.id}>
               {column.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div>
         <label htmlFor="task-priority" className="mb-1.5 block">
           <PanelHeading>Priority</PanelHeading>
         </label>
-        <select
+        <Select
           id="task-priority"
           value={draft.priority}
-          onChange={(event) => {
-            onChange({ priority: Number(event.target.value) });
+          onChange={(priority) => {
+            onChange({ priority: Number(priority) });
           }}
-          className={SELECT_CLASS}
         >
           {PRIORITIES.map((level) => (
             <option key={level.value} value={level.value}>
               {level.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <div>
@@ -882,10 +927,23 @@ function MetadataPanel({
           id="task-due"
           type="date"
           value={draft.dueDate ?? ""}
+          data-empty={draft.dueDate === null || undefined}
           onChange={(event) => {
             onChange({ dueDate: event.target.value === "" ? null : event.target.value });
           }}
-          className={SELECT_CLASS}
+          className={cn(
+            FIELD,
+            // WebKit fills an *empty* date input with today's date in grey
+            // rather than drawing a placeholder, so an unset due date reads as
+            // "due today" at a glance — the one pair of states this control must
+            // never confuse. Hiding the text while the field is empty and
+            // unfocused leaves it looking empty, which is the truth; the caption
+            // below says so in words. Focusing it brings the digits back, or
+            // there would be nothing to type over.
+            "data-empty:text-transparent data-empty:focus:text-fg-primary",
+            "[&::-webkit-calendar-picker-indicator]:opacity-50",
+            "[&::-webkit-calendar-picker-indicator]:hover:opacity-100",
+          )}
         />
         {/* Always says which state the field is in, including "none". WebKit
             draws today's date greyed inside an empty date input, so an unset due
@@ -928,7 +986,7 @@ function MetadataPanel({
             setEstimateError(null);
             onChange({ estimateMinutes: parsed });
           }}
-          className={SELECT_CLASS}
+          className={cn(FIELD, "placeholder:text-fg-secondary")}
         />
         {estimateError === null ? null : (
           <p id="task-estimate-error" role="alert" className="text-danger-fg mt-1 text-2xs">
@@ -1060,7 +1118,7 @@ function TagsPanel({
                 setName("");
               }
             }}
-            className="border-border-subtle bg-surface-card text-fg-primary w-full rounded-md border px-2 py-1.5 text-sm"
+            className={cn(FIELD, "placeholder:text-fg-secondary")}
           />
 
           {rest.length === 0 ? null : (

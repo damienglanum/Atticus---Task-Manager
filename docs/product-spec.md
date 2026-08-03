@@ -1,4 +1,4 @@
-# Product specification — Atticus - Task Manager v1.0
+# Product specification — Atticus v1.0
 
 Status: **approved for implementation** (2026-07-30)
 Owner: single user (local, offline)

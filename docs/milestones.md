@@ -332,7 +332,7 @@ Acceptance criteria:
   The mark now exists in the application, so a release build can be timed by hand with it.
 - ✅ **Full end-to-end suite green**: 86 specs, including restart-and-persist and the export round
   trip.
-- ✅ **`npm run tauri build` produces `Atticus - Task Manager_0.1.0_aarch64.dmg`** from a 6.9 MB
+- ✅ **`npm run tauri build` produces `Atticus_0.1.0_aarch64.dmg`** from a 6.9 MB
   binary. `.dmg` only: the `.app` is an intermediate a disk image is made from, and Tauri removes it
   afterwards, so installing leaves one copy of the application rather than two. `release:check`
   fails if a stale `.app` is left behind.

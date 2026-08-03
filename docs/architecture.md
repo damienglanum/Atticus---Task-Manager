@@ -1,4 +1,4 @@
-# Architecture — Atticus - Task Manager
+# Architecture — Atticus
 
 Status: approved for implementation (2026-07-30). Decisions with lasting consequences are recorded
 as ADRs in [`docs/adr/`](adr/) and referenced from here.
