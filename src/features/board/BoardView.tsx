@@ -10,9 +10,10 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Plus } from "lucide-react";
+import { Archive, Columns3, Plus } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
+import { BlurFade } from "@/components/magicui/BlurFade";
 import { Button } from "@/components/ui/Button";
 import { notifyError, notifyUndoable } from "@/app/toast";
 import type { Column } from "@/lib/bindings/Column";
@@ -131,6 +132,7 @@ export function BoardView({
   const undo = useUndo(boardId);
 
   const [dragging, setDragging] = useState<Task | null>(null);
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
 
   // Pointer drag needs a small threshold or it swallows clicks on the card's
   // own controls; keyboard drag uses dnd-kit's sortable coordinate getter so
@@ -236,6 +238,7 @@ export function BoardView({
   function handleDragStart(event: DragStartEvent) {
     const task = snapshot.data?.tasks.find((each) => each.id === String(event.active.id));
     setDragging(task ?? null);
+    setDragWidth(event.active.rect.current.initial?.width ?? null);
   }
 
   /**
@@ -246,6 +249,7 @@ export function BoardView({
    */
   function handleDragEnd(event: DragEndEvent) {
     setDragging(null);
+    setDragWidth(null);
 
     const board = snapshot.data;
     if (board === undefined || event.over === null) return;
@@ -320,56 +324,79 @@ export function BoardView({
   const canDeleteColumns = columns.length > 1;
 
   return (
-    <div className="relative flex h-full flex-col">
-      <div className="flex shrink-0 flex-wrap items-end justify-between gap-3 px-5 pt-5 pb-4">
-        <div className="min-w-0">
-          <p className="text-fg-secondary text-2xs font-semibold tracking-[0.08em] uppercase">
-            Workspace
-          </p>
-          <h1 className="text-fg-primary mt-1 truncate text-xl font-semibold tracking-[-0.01em]">
-            {projectName}
-          </h1>
+    <BlurFade className="relative flex h-full flex-col">
+      <header data-board-header aria-label="Board toolbar" className="bg-surface-app shrink-0">
+        <div className="flex min-h-16 items-center gap-4 px-6 py-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <div className="min-w-0 shrink">
+              <h1 className="text-fg-primary truncate text-lg leading-tight font-semibold tracking-[-0.015em]">
+                {projectName}
+              </h1>
+              <p className="text-fg-secondary mt-1 truncate font-mono text-[9px] leading-none tracking-[0.1em] uppercase">
+                {projectPrefix} / {String(columns.length)}{" "}
+                {columns.length === 1 ? "column" : "columns"}
+                {" / "}
+                {String(totalTasks)} {totalTasks === 1 ? "task" : "tasks"}
+              </p>
+            </div>
+
+            {tabs === null ? null : (
+              <>
+                <span aria-hidden className="bg-border-default h-8 w-px shrink-0" />
+                <div className="min-w-0">{tabs}</div>
+              </>
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setColumnDialogOpen(true);
+              }}
+            >
+              <Columns3 size={14} aria-hidden />
+              Add column
+            </Button>
+            <Button
+              variant="primary"
+              disabled={columns.length === 0}
+              onClick={() => {
+                // The first column is where work arrives. A "new task" with no
+                // column named has to land somewhere, and the intake column is
+                // the only answer that does not need explaining.
+                setComposingColumnId(columns[0]?.id ?? null);
+              }}
+            >
+              <Plus size={15} aria-hidden />
+              New task
+            </Button>
+          </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {tabs}
-          <Button
-            variant="primary"
-            onClick={() => {
-              // The first column is where work arrives. A "new task" with no
-              // column named has to land somewhere, and the intake column is
-              // the only answer that does not need explaining.
-              setComposingColumnId(columns[0]?.id ?? null);
-            }}
-          >
-            <Plus size={15} aria-hidden />
-            New task
-          </Button>
-        </div>
-      </div>
-
-      <FilterBar
-        filter={filter}
-        onChange={setFilter}
-        columns={columns}
-        labels={snapshot.data.labels}
-        savedFilters={savedFilters.data ?? []}
-        matching={matchingTasks}
-        total={totalTasks}
-        onSave={() => {
-          setSavingFilter(true);
-        }}
-        onApplySaved={(saved) => {
-          try {
-            setFilter(parseFilter(JSON.parse(saved.filter)));
-          } catch {
-            notifyError(`The saved filter “${saved.name}” could not be read.`);
-          }
-        }}
-        onDeleteSaved={(saved) => {
-          deleteSavedFilter.mutate(saved.id, { onError: reportFailure });
-        }}
-      />
+        <FilterBar
+          filter={filter}
+          onChange={setFilter}
+          columns={columns}
+          labels={snapshot.data.labels}
+          savedFilters={savedFilters.data ?? []}
+          matching={matchingTasks}
+          total={totalTasks}
+          onSave={() => {
+            setSavingFilter(true);
+          }}
+          onApplySaved={(saved) => {
+            try {
+              setFilter(parseFilter(JSON.parse(saved.filter)));
+            } catch {
+              notifyError(`The saved filter “${saved.name}” could not be read.`);
+            }
+          }}
+          onDeleteSaved={(saved) => {
+            deleteSavedFilter.mutate(saved.id, { onError: reportFailure });
+          }}
+        />
+      </header>
 
       {savingFilter ? (
         <SaveFilterDialog
@@ -401,9 +428,10 @@ export function BoardView({
           onDragEnd={handleDragEnd}
           onDragCancel={() => {
             setDragging(null);
+            setDragWidth(null);
           }}
         >
-          <div className="flex h-full gap-4 overflow-x-auto px-5 pt-1 pb-5">
+          <div data-board-scroll className="flex h-full gap-3 overflow-x-auto px-6 pt-4 pb-6">
             {columns.map((column, index) => (
               <BoardColumn
                 key={column.id}
@@ -454,23 +482,14 @@ export function BoardView({
                 onMoveTaskToColumn={moveTaskToColumn}
               />
             ))}
-
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(null);
-                setColumnDialogOpen(true);
-              }}
-              className="border-border-default text-fg-secondary hover:border-border-strong hover:text-fg-primary flex h-fit w-60 shrink-0 cursor-default items-center gap-2 rounded-xl border border-dashed px-3 py-3 text-left text-sm"
-            >
-              <Plus size={15} aria-hidden />
-              Add a column
-            </button>
           </div>
 
           <DragOverlay dropAnimation={null}>
             {dragging === null ? null : (
-              <div className="border-accent-border bg-surface-raised w-[19rem] rounded-lg border px-3 py-2.5 shadow-(--shadow-overlay)">
+              <div
+                style={{ width: dragWidth ?? undefined }}
+                className="border-accent-border bg-surface-raised max-w-[calc(100vw-2rem)] rounded-lg border px-3 py-2.5 shadow-(--shadow-overlay)"
+              >
                 <p className="text-fg-primary line-clamp-2 text-base font-medium break-words">
                   {dragging.title}
                 </p>
@@ -607,17 +626,17 @@ export function BoardView({
           }}
         />
       )}
-    </div>
+    </BlurFade>
   );
 }
 
 function BoardSkeleton() {
   return (
-    <div className="flex h-full gap-4 px-5 pt-5" aria-hidden>
+    <div className="flex h-full gap-3 overflow-hidden px-6 pt-4" aria-hidden>
       {[0, 1, 2, 3].map((index) => (
         <div
           key={index}
-          className="bg-surface-column border-border-subtle h-40 w-80 shrink-0 rounded-xl border"
+          className="bg-surface-column border-border-subtle h-40 min-w-[16.25rem] max-w-96 flex-1 shrink-0 basis-64 rounded-sm border"
         />
       ))}
       <p className="sr-only" role="status">

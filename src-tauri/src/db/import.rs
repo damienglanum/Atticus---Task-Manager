@@ -51,6 +51,7 @@ struct IdMap {
     columns: HashMap<String, String>,
     tasks: HashMap<String, String>,
     labels: HashMap<String, String>,
+    notes: HashMap<String, String>,
 }
 
 impl IdMap {
@@ -84,6 +85,7 @@ pub fn apply(
         // deleting the projects would be enough. Being explicit means a future
         // table that is *not* reachable by cascade cannot be forgotten silently.
         for table in [
+            "note_task_links",
             "task_labels",
             "file_refs",
             "link_refs",
@@ -329,17 +331,34 @@ fn write_children(
     }
 
     for note in &data.notes {
+        let id = new_id();
+        ids.notes.insert(note.id.clone(), id.clone());
         tx.execute(
             "INSERT INTO notes (id, project_id, title, body, position, created_at, updated_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             rusqlite::params![
-                new_id(),
+                id,
                 IdMap::get(&ids.projects, &note.project_id, "project")?,
                 note.title,
                 note.body,
                 note.position,
                 note.created_at,
                 note.updated_at,
+            ],
+        )?;
+    }
+
+    // Both parents have fresh ids during a merge. Write the relation only after
+    // notes and tasks have been inserted and remapped.
+    for link in &data.note_task_links {
+        tx.execute(
+            "INSERT INTO note_task_links (note_id, task_id, position, created_at) \
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                IdMap::get(&ids.notes, &link.note_id, "note")?,
+                IdMap::get(&ids.tasks, &link.task_id, "task")?,
+                link.position,
+                link.created_at,
             ],
         )?;
     }
@@ -426,6 +445,22 @@ mod tests {
         )
         .expect("label applied");
         link_refs::add(db.connection_mut(), &task.id, "https://example.com/spec").expect("link");
+        let note_id = crate::db::projects::new_id();
+        db.connection()
+            .execute(
+                "INSERT INTO notes \
+                   (id, project_id, title, body, position, created_at, updated_at) \
+                 VALUES (?1, ?2, 'Release plan', '', 0, 1, 1)",
+                [&note_id, &project.id],
+            )
+            .expect("note");
+        db.connection()
+            .execute(
+                "INSERT INTO note_task_links (note_id, task_id, position, created_at) \
+                 VALUES (?1, ?2, 0, 1)",
+                [&note_id, &task.id],
+            )
+            .expect("note/task link");
 
         let document = export(db.connection(), &ExportScope::Everything, "0.1.0").expect("export");
 
@@ -447,11 +482,24 @@ mod tests {
         assert_eq!(count(&target, "subtasks"), 1);
         assert_eq!(count(&target, "labels"), 1);
         assert_eq!(count(&target, "link_refs"), 1);
+        assert_eq!(count(&target, "notes"), 1);
+        assert_eq!(count(&target, "note_task_links"), 1);
         assert_eq!(
             count(&target, "task_labels"),
             1,
             "the link survives remapping"
         );
+        let linked: (String, String) = target
+            .connection()
+            .query_row(
+                "SELECT n.title, t.title FROM note_task_links link \
+                 JOIN notes n ON n.id = link.note_id \
+                 JOIN tasks t ON t.id = link.task_id",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("the remapped note/task link");
+        assert_eq!(linked, ("Release plan".to_owned(), "A task".to_owned()));
     }
 
     #[test]
@@ -512,6 +560,7 @@ mod tests {
             "the import, not the original"
         );
         assert_eq!(count(&target, "tasks"), 1);
+        assert_eq!(count(&target, "note_task_links"), 1);
     }
 
     #[test]
@@ -591,9 +640,8 @@ mod tests {
 /// Reading the checked-in fixtures.
 ///
 /// ADR-0006 keeps a fixture for **every released export version, forever**, so
-/// that a file written by any past build still imports. There is only one
-/// released version today, and pinning it now is the whole point: the moment a
-/// second one exists, this fixture is what proves version 1 is still readable.
+/// that a file written by any past build still imports. The fixtures below pin
+/// each released shape so adding a new one cannot make an older file unreadable.
 #[cfg(test)]
 mod fixtures {
     use super::*;
@@ -661,6 +709,53 @@ mod fixtures {
     }
 
     #[test]
+    fn version_4_imports_a_note_task_link_with_both_ids_remapped() {
+        let document = read("v4.json");
+        let original_note_id = document.data.notes[0].id.clone();
+        let original_task_id = document.data.tasks[0].id.clone();
+        let mut target = Database::open_in_memory().expect("database");
+
+        let result = apply(target.connection_mut(), &document, ImportMode::Merge).expect("imports");
+
+        assert_eq!(result.created.note_task_links, 1);
+        let (note_id, task_id, note_title, task_title, position, created_at): (
+            String,
+            String,
+            String,
+            String,
+            i64,
+            i64,
+        ) = target
+            .connection()
+            .query_row(
+                "SELECT link.note_id, link.task_id, note.title, task.title, \
+                        link.position, link.created_at \
+                 FROM note_task_links link \
+                 JOIN notes note ON note.id = link.note_id \
+                 JOIN tasks task ON task.id = link.task_id",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )
+            .expect("the note/task link");
+
+        assert_ne!(note_id, original_note_id);
+        assert_ne!(task_id, original_task_id);
+        assert_eq!(note_title, "A linked note");
+        assert_eq!(task_title, "A linked task");
+        assert_eq!(position, 0);
+        assert_eq!(created_at, 1_754_179_200_000);
+    }
+
+    #[test]
     fn version_1_keeps_the_values_that_are_easy_to_lose_in_a_format_change() {
         // Not a count: the fields that a careless upgrade function would drop or
         // coerce — a due date, an estimate, a WIP limit, a done flag, and an
@@ -716,8 +811,8 @@ mod fixtures {
 
     #[test]
     fn a_fixture_exists_for_every_version_this_build_can_write() {
-        // The guard that makes the promise real: adding CURRENT_EXPORT_VERSION 2
-        // without checking in `v2.json` fails here rather than silently leaving
+        // The guard that makes the promise real: bumping CURRENT_EXPORT_VERSION
+        // without checking in its fixture fails here rather than silently leaving
         // the new format unpinned.
         use crate::domain::export_format::CURRENT_EXPORT_VERSION;
 

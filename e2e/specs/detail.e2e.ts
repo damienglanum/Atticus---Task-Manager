@@ -160,7 +160,10 @@ describe("the task editor", () => {
 
     // Yesterday, so the state is unambiguous whenever this runs.
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    await dialog.$("#task-due").setValue(yesterday);
+    await dialog.$("#task-due").click();
+    const day = $(`[data-date="${yesterday}"]`);
+    await day.waitForDisplayed();
+    await day.click();
 
     await saveEditor(dialog);
 

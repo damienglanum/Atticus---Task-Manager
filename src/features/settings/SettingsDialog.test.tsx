@@ -74,15 +74,13 @@ describe("SettingsDialog", () => {
     expect(screen.queryByText("Appearance")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "AI access" }));
-    expect(await screen.findByText("Workflow rules included")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Read only/ })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(await screen.findByText("Model instructions")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Read only/ })).toBeChecked();
+    expect(screen.getByText(/full project-note bodies/i)).toBeInTheDocument();
     expect(screen.getByText("--mcp")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "About" }));
-    expect(await screen.findByText("Installation details")).toBeInTheDocument();
+    expect(await screen.findByText("Application")).toBeInTheDocument();
     expect(screen.getByText("0.1.4")).toBeInTheDocument();
   });
 });

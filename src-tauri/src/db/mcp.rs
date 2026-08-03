@@ -5,6 +5,7 @@
 //! policy, and changing a setting while a client is connected takes effect on
 //! the next tool call without restarting either process.
 
+use rmcp::schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -14,7 +15,7 @@ use crate::error::{AppError, AppResult};
 const SETTINGS_KEY: &str = "mcp:settings";
 const REVISION_KEY: &str = "mcp:external-revision";
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "McpAccess.ts")]
 pub enum McpAccess {
@@ -82,6 +83,21 @@ pub fn require_managed_project(conn: &rusqlite::Connection, project_id: &str) ->
     )
 }
 
+pub fn require_active_managed_project(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> AppResult<()> {
+    require_managed_project(conn, project_id)?;
+    let project = crate::db::projects::find(conn, project_id)?;
+    if project.archived_at.is_some() {
+        return Err(AppError::Conflict {
+            message: "Archived projects are read-only through MCP. Restore this project in Atticus before changing it."
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
 pub fn require_managed_board(conn: &rusqlite::Connection, board_id: &str) -> AppResult<()> {
     require_managed(
         conn,
@@ -93,6 +109,12 @@ pub fn require_managed_board(conn: &rusqlite::Connection, board_id: &str) -> App
            WHERE b.id = ?1\
          )",
     )
+}
+
+pub fn require_active_managed_board(conn: &rusqlite::Connection, board_id: &str) -> AppResult<()> {
+    require_managed_board(conn, board_id)?;
+    let board = crate::db::boards::find(conn, board_id)?;
+    require_active_managed_project(conn, &board.project_id)
 }
 
 pub fn require_managed_column(conn: &rusqlite::Connection, column_id: &str) -> AppResult<()> {
@@ -109,6 +131,15 @@ pub fn require_managed_column(conn: &rusqlite::Connection, column_id: &str) -> A
     )
 }
 
+pub fn require_active_managed_column(
+    conn: &rusqlite::Connection,
+    column_id: &str,
+) -> AppResult<()> {
+    require_managed_column(conn, column_id)?;
+    let column = crate::db::columns::find(conn, column_id)?;
+    require_active_managed_board(conn, &column.board_id)
+}
+
 pub fn require_managed_task(conn: &rusqlite::Connection, task_id: &str) -> AppResult<()> {
     require_managed(
         conn,
@@ -120,6 +151,19 @@ pub fn require_managed_task(conn: &rusqlite::Connection, task_id: &str) -> AppRe
            WHERE t.id = ?1\
          )",
     )
+}
+
+pub fn require_live_managed_task(conn: &rusqlite::Connection, task_id: &str) -> AppResult<()> {
+    require_managed_task(conn, task_id)?;
+    let task = crate::db::tasks::find(conn, task_id)?;
+    require_active_managed_project(conn, &task.project_id)?;
+    if task.archived_at.is_some() {
+        return Err(AppError::Conflict {
+            message: "Archived tasks are read-only through MCP. Restore this task in Atticus before changing it."
+                .to_owned(),
+        });
+    }
+    Ok(())
 }
 
 pub fn require_managed_subtask(conn: &rusqlite::Connection, subtask_id: &str) -> AppResult<()> {
@@ -134,6 +178,34 @@ pub fn require_managed_subtask(conn: &rusqlite::Connection, subtask_id: &str) ->
            WHERE s.id = ?1\
          )",
     )
+}
+
+pub fn require_live_managed_subtask(
+    conn: &rusqlite::Connection,
+    subtask_id: &str,
+) -> AppResult<()> {
+    require_managed_subtask(conn, subtask_id)?;
+    let subtask = crate::db::subtasks::find(conn, subtask_id)?;
+    require_live_managed_task(conn, &subtask.task_id)
+}
+
+pub fn require_managed_note(conn: &rusqlite::Connection, note_id: &str) -> AppResult<()> {
+    require_managed(
+        conn,
+        "note",
+        note_id,
+        "SELECT EXISTS(\
+           SELECT 1 FROM notes n \
+           JOIN mcp_managed_projects m ON m.project_id = n.project_id \
+           WHERE n.id = ?1\
+         )",
+    )
+}
+
+pub fn require_active_managed_note(conn: &rusqlite::Connection, note_id: &str) -> AppResult<()> {
+    require_managed_note(conn, note_id)?;
+    let note = crate::db::notes::find(conn, note_id)?;
+    require_active_managed_project(conn, &note.project_id)
 }
 
 fn require_managed(
@@ -159,6 +231,7 @@ fn require_managed(
 mod tests {
     use super::*;
     use crate::db::columns;
+    use crate::db::notes;
     use crate::db::projects::{self, NewProject};
     use crate::db::subtasks;
     use crate::db::tasks::{self, NewTask};
@@ -239,6 +312,14 @@ mod tests {
             "Private checklist item",
         )
         .expect("user subtask creates");
+        let user_note = notes::create(
+            database.connection_mut(),
+            &user_project.id,
+            "Private note",
+            "Only the user may change this body.",
+            std::slice::from_ref(&user_task.id),
+        )
+        .expect("user note creates");
 
         assert!(!user_project.mcp_managed);
         assert!(!is_managed_project(database.connection(), &user_project.id).expect("scope reads"));
@@ -247,6 +328,7 @@ mod tests {
         assert!(require_managed_column(database.connection(), &user_column.id).is_err());
         assert!(require_managed_task(database.connection(), &user_task.id).is_err());
         assert!(require_managed_subtask(database.connection(), &user_subtask.id).is_err());
+        assert!(require_managed_note(database.connection(), &user_note.id).is_err());
 
         let (ai_project, ai_board) =
             projects::create_mcp(database.connection_mut(), project_input("Agent workspace"))
@@ -268,6 +350,14 @@ mod tests {
             "Agent checklist item",
         )
         .expect("AI subtask creates");
+        let ai_note = notes::create(
+            database.connection_mut(),
+            &ai_project.id,
+            "Agent note",
+            "Long-form context for managed work.",
+            std::slice::from_ref(&ai_task.id),
+        )
+        .expect("AI note creates");
 
         assert!(ai_project.mcp_managed);
         assert!(is_managed_project(database.connection(), &ai_project.id).expect("scope reads"));
@@ -276,6 +366,7 @@ mod tests {
         require_managed_column(database.connection(), &ai_column.id).expect("column allowed");
         require_managed_task(database.connection(), &ai_task.id).expect("task allowed");
         require_managed_subtask(database.connection(), &ai_subtask.id).expect("subtask allowed");
+        require_managed_note(database.connection(), &ai_note.id).expect("note allowed");
 
         let sidebar_boards = crate::db::boards::list_mcp_managed(database.connection())
             .expect("managed boards list");

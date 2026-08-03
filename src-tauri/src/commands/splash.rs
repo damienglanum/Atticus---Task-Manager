@@ -4,7 +4,8 @@
 //! to finish drawing, and the frontend has to have a workspace to render. They
 //! finish in an order that depends on the machine — a warm start beats the
 //! animation, a cold one does not — so each reports in and whichever arrives
-//! second does the swap.
+//! second does the swap. Once the application is ready, a bounded watchdog also
+//! makes the transition if the splash's JavaScript or IPC signal fails.
 //!
 //! Doing it the obvious way instead, with a fixed delay, gets one of two
 //! outcomes and no way to pick: either the animation is cut off mid-stroke on a
@@ -12,15 +13,26 @@
 //! cold launch as a release gate, and padding it would be measuring a decision
 //! rather than the application.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
 use tauri::{Manager, State, WebviewWindow};
+
+/// The animation currently takes around one and a half seconds. This is a
+/// generous backstop rather than the normal launch timer: it starts only after
+/// the workspace is ready and matters only when the splash script never reports
+/// completion (for example after a JavaScript or IPC failure).
+const FAIL_OPEN_AFTER: Duration = Duration::from_millis(2_800);
 
 /// Which of the two conditions have been met so far.
 #[derive(Default)]
 pub struct SplashState {
     animation_finished: AtomicBool,
     app_ready: AtomicBool,
+    swapped: AtomicBool,
+    watchdog_started: AtomicBool,
 }
 
 impl SplashState {
@@ -33,17 +45,36 @@ impl SplashState {
         flag.store(true, Ordering::SeqCst);
         self.animation_finished.load(Ordering::SeqCst) && self.app_ready.load(Ordering::SeqCst)
     }
+
+    /// Claims the window transition. Commands can be repeated by the frontend
+    /// and can race the watchdog, but exactly one caller may touch the windows.
+    fn claim_swap(&self) -> bool {
+        self.swapped
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+
+    /// Arms the watchdog once even when React invokes `app_ready` repeatedly.
+    fn claim_watchdog(&self) -> bool {
+        self.watchdog_started
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
 }
 
-/// Closes the splash and shows the application, if both parties are done.
-fn swap_if_ready(app: &tauri::AppHandle, state: &SplashState, flag: &AtomicBool) {
-    if !state.mark(flag) {
+/// Shows the application and then closes the splash exactly once.
+fn swap_windows(app: &tauri::AppHandle, state: &SplashState) {
+    // Do not consume the one-time guard if application setup ever changes and
+    // calls this before the main window exists. A later signal can still retry.
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+
+    if !state.claim_swap() {
         return;
     }
 
-    if let Some(main) = app.get_webview_window("main") {
-        show(&main);
-    }
+    show(&main);
 
     // Closed last. Closing it first leaves a frame with no window of ours in
     // front, which on macOS lets whatever is behind the application flash
@@ -51,6 +82,28 @@ fn swap_if_ready(app: &tauri::AppHandle, state: &SplashState, flag: &AtomicBool)
     if let Some(splash) = app.get_webview_window("splash") {
         let _ = splash.close();
     }
+}
+
+/// Swaps normally once both the animation and application have reported in.
+fn swap_if_ready(app: &tauri::AppHandle, state: &SplashState, flag: &AtomicBool) {
+    if state.mark(flag) {
+        swap_windows(app, state);
+    }
+}
+
+/// Makes a failed splash script recoverable without turning the normal launch
+/// path back into a fixed delay. The application-ready signal is a prerequisite,
+/// so this can never expose a workspace that is still loading.
+fn start_fail_open_watchdog(app: tauri::AppHandle, state: &SplashState) {
+    if state.swapped.load(Ordering::SeqCst) || !state.claim_watchdog() {
+        return;
+    }
+
+    std::thread::spawn(move || {
+        std::thread::sleep(FAIL_OPEN_AFTER);
+        let state = app.state::<SplashState>();
+        swap_windows(&app, state.inner());
+    });
 }
 
 fn show(window: &WebviewWindow) {
@@ -74,6 +127,7 @@ pub fn splash_animation_finished(app: tauri::AppHandle, state: State<'_, SplashS
 pub fn app_ready(app: tauri::AppHandle, state: State<'_, SplashState>) {
     let flag = &state.inner().app_ready;
     swap_if_ready(&app, state.inner(), flag);
+    start_fail_open_watchdog(app, state.inner());
 }
 
 #[cfg(test)]
@@ -82,10 +136,11 @@ mod tests {
 
     #[test]
     fn neither_signal_alone_is_enough() {
-        let state = SplashState::default();
+        let animation_only = SplashState::default();
+        assert!(!animation_only.mark(&animation_only.animation_finished));
 
-        assert!(!state.mark(&state.animation_finished));
-        assert!(!SplashState::default().mark(&SplashState::default().app_ready));
+        let app_only = SplashState::default();
+        assert!(!app_only.mark(&app_only.app_ready));
     }
 
     #[test]
@@ -107,5 +162,21 @@ mod tests {
 
         assert!(!state.mark(&state.app_ready));
         assert!(!state.mark(&state.app_ready));
+    }
+
+    #[test]
+    fn the_window_swap_can_only_be_claimed_once() {
+        let state = SplashState::default();
+
+        assert!(state.claim_swap());
+        assert!(!state.claim_swap());
+    }
+
+    #[test]
+    fn strict_mode_can_only_start_one_watchdog() {
+        let state = SplashState::default();
+
+        assert!(state.claim_watchdog());
+        assert!(!state.claim_watchdog());
     }
 }

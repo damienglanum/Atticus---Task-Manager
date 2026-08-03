@@ -49,6 +49,7 @@ function setup(props: Partial<Parameters<typeof ProjectSidebar>[0]> = {}) {
     onArchive: vi.fn(),
     onDelete: vi.fn(),
     onOpenSettings: vi.fn(),
+    onOpenProjectNotes: vi.fn(),
     onNavigate: vi.fn(),
     onRenameProfile: vi.fn(),
   };
@@ -56,10 +57,12 @@ function setup(props: Partial<Parameters<typeof ProjectSidebar>[0]> = {}) {
     <ProjectSidebar
       active={[]}
       archived={[]}
+      aiAccessEnabled
       mcpProjects={[]}
       mcpBoards={[]}
       selectedId={null}
       selectedBoardId={null}
+      notesProjectId={null}
       view="board"
       profileName="Ada Lovelace"
       {...handlers}
@@ -86,12 +89,75 @@ describe("ProjectSidebar", () => {
     expect(screen.getByRole("button", { name: "Create your first project" })).toBeInTheDocument();
   });
 
-  it("marks the open project as current", () => {
+  it("expands the selected project branch", () => {
     const active = [makeProject(), makeProject({ id: "p2", name: "Other" })];
     setup({ active, selectedId: "p2" });
 
-    expect(screen.getByRole("button", { name: "Other" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: "Other" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Takenkanban" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Board view for Other" })).toBeVisible();
+  });
+
+  it("marks exactly one destination inside the selected project as current", () => {
+    setup({ active: [makeProject()], selectedId: "p1", view: "board" });
+
+    const currentDestinations = screen.getAllByRole("button", { current: "page" });
+    expect(currentDestinations).toHaveLength(1);
+    expect(currentDestinations[0]).toHaveAccessibleName("Board view for Takenkanban");
     expect(screen.getByRole("button", { name: "Takenkanban" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("expands an inactive project disclosure without navigating", async () => {
+    const active = [makeProject(), makeProject({ id: "p2", name: "Other" })];
+    const handlers = setup({ active, selectedId: "p1" });
+    const disclosure = screen.getByRole("button", { name: "Other" });
+
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(disclosure);
+
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Board view for Other" })).toBeVisible();
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+    expect(handlers.onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("opens a project's Board View from its expanded branch", async () => {
+    const project = makeProject();
+    const handlers = setup({ active: [project], selectedId: project.id });
+
+    await userEvent.click(screen.getByRole("button", { name: "Board view for Takenkanban" }));
+
+    expect(handlers.onSelect).toHaveBeenCalledExactlyOnceWith(project);
+    expect(handlers.onOpenProjectNotes).not.toHaveBeenCalled();
+  });
+
+  it("opens Project Notes for the exact project", async () => {
+    const first = makeProject();
+    const second = makeProject({ id: "p2", name: "Other" });
+    const handlers = setup({ active: [first, second], selectedId: second.id });
+
+    await userEvent.click(screen.getByRole("button", { name: "Project notes for Other" }));
+
+    expect(handlers.onOpenProjectNotes).toHaveBeenCalledExactlyOnceWith(second);
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps nested project Settings distinct from global Settings", async () => {
+    const project = makeProject();
+    const handlers = setup({ active: [project], selectedId: project.id });
+
+    await userEvent.click(screen.getByRole("button", { name: "Project settings for Takenkanban" }));
+
+    expect(handlers.onEdit).toHaveBeenCalledExactlyOnceWith(project);
+    expect(handlers.onOpenSettings).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Workspace settings" }));
+
+    expect(handlers.onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(handlers.onEdit).toHaveBeenCalledTimes(1);
   });
 
   it("hides archived projects behind a collapsed section", async () => {
@@ -122,6 +188,32 @@ describe("ProjectSidebar", () => {
     expect(
       screen.queryByRole("button", { name: "Agent work in Release agent" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("hides AI boards while AI access is off", () => {
+    setup({
+      aiAccessEnabled: false,
+      mcpProjects: [makeProject({ id: "ai-1", name: "Release agent", mcpManaged: true })],
+      mcpBoards: [makeBoard()],
+    });
+
+    expect(screen.queryByRole("button", { name: /AI Boards/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Agent work in Release agent" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the empty AI drawer compact until it is opened", async () => {
+    setup();
+
+    const disclosure = screen.getByRole("button", { name: /AI Boards/ });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("No AI boards yet")).not.toBeInTheDocument();
+
+    await userEvent.click(disclosure);
+
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("No AI boards yet")).toBeVisible();
   });
 
   it("opens an AI board from its isolated section", async () => {

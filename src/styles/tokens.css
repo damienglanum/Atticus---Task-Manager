@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* DaisyUI supplies the durable application primitives while Atticus keeps
+   ownership of its measured color tokens and theme switching. Prefixing keeps
+   component names explicit and prevents collisions with existing utilities. */
+@plugin "daisyui" {
+  themes: false;
+  prefix: "dui-";
+  include:
+    button, badge, card, menu, input, textarea, select, checkbox, tabs, alert, progress, skeleton,
+    tooltip;
+  exclude: rootscrollgutter, rootcolor;
+  logs: false;
+}
+
 /* Radix Colors — MIT. 12-step scales; light and dark are paired scales, not inversions.
    Which step maps to which token below is asserted by contrast measurement in milestone 8. */
 @import "@radix-ui/colors/slate.css";
@@ -30,10 +43,12 @@
 
 @theme {
   /* ── Typography ───────────────────────────────────────────────────────────
-     system-ui resolves to SF Pro on macOS: designed for this platform, already
-     on disk, no bundle, no font licence. See docs/design-decisions.md §3. */
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+     Prefer the Visily direction's Inter / JetBrains Mono pairing when those
+     fonts are installed, with native platform faces as offline-safe fallbacks. */
+  --font-sans:
+    Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* The v1.0 scale capped everything at 15px, on the reasoning that density is
      what the board is for. The v1.1 direction keeps that reasoning for the
@@ -64,10 +79,10 @@
   /* ── Radius ───────────────────────────────────────────────────────────────
      Softer than v1.0 across the board. The step between `md` and `lg` is what
      separates a control from the panel it sits in, so it is deliberately wide. */
-  --radius-sm: 3px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 7px;
+  --radius-xl: 10px;
 
   /* ── Motion ─────────────────────────────────────────────────────────────── */
   --duration-fast: 100ms;
@@ -79,11 +94,12 @@
      inverts that: the canvas is white, and the sidebar and the column panels
      are the tinted things sitting on it. That is the single change that makes
      the board read as panels-on-a-page rather than as a wall of cards. */
-  --color-surface-app: #ffffff;
-  --color-surface-column: var(--slate-2);
-  --color-surface-card: #ffffff;
+  --color-surface-app: #fbfaf8;
+  --color-surface-sidebar: #f2f1ee;
+  --color-surface-column: #f5f4f1;
+  --color-surface-card: #fffefa;
   --color-surface-raised: #ffffff;
-  --color-surface-sunken: var(--slate-3);
+  --color-surface-sunken: #f0efec;
 
   /* ── Foreground ─────────────────────────────────────────────────────────────
      Two text steps, not three. Radix's scales offer exactly two guaranteed
@@ -101,8 +117,8 @@
      `strong` is the boundary of an interactive control, so it carries the 3:1
      that SC 1.4.11 requires of anything that identifies one. `subtle` and
      `default` separate content that identifies itself, and are lighter. */
-  --color-border-subtle: var(--slate-5);
-  --color-border-default: var(--slate-7);
+  --color-border-subtle: #e1dfda;
+  --color-border-default: #cfcdc7;
   --color-border-strong: var(--slate-10);
 
   /* ── Accent — the only saturated colour in the chrome ─────────────────────
@@ -152,15 +168,26 @@
    assignments differ, because a dark UI layers upward from the darkest step
    while a light UI layers a card above a slightly tinted page. */
 .dark {
-  --color-surface-app: var(--slate-2);
-  --color-surface-column: var(--slate-3);
-  --color-surface-card: var(--slate-4);
+  /* Visily direction: charcoal layers, each visibly separated without turning
+     the interface into a stack of black boxes. */
+  --color-surface-app: #1d1e21;
+  --color-surface-sidebar: #1b1c1f;
+  --color-surface-column: #202125;
+  --color-surface-card: #27282c;
   /* One step above the card, so the thing being dragged is lighter than the
      thing it came from. In the light theme both are white and the shadow does
      that job on its own; in the dark theme a shadow over a dark surface is
      nearly invisible, so the step has to carry it. */
-  --color-surface-raised: var(--slate-5);
-  --color-surface-sunken: var(--slate-1);
+  --color-surface-raised: #2d2e33;
+  --color-surface-sunken: #18191c;
+
+  --color-fg-primary: #f1f2f3;
+  --color-fg-secondary: #b6b8be;
+  --color-fg-muted: #7f828a;
+
+  --color-border-subtle: #34363b;
+  --color-border-default: #43454b;
+  --color-border-strong: #767982;
 
   /* Step 11 unpinned here — see the note beside the light values for why the
      light theme cannot use it. */
@@ -181,6 +208,35 @@
 }
 
 :root {
+  /* DaisyUI semantic bridge. Components use these variables; the product's
+     existing tokens remain the single source of truth. */
+  --color-base-100: var(--color-surface-card);
+  --color-base-200: var(--color-surface-column);
+  --color-base-300: var(--color-surface-sunken);
+  --color-base-content: var(--color-fg-primary);
+  --color-primary: var(--color-accent-solid);
+  --color-primary-content: var(--color-on-solid);
+  --color-secondary: var(--color-accent-fg);
+  --color-secondary-content: var(--color-on-solid);
+  --color-accent: var(--color-accent-fg);
+  --color-accent-content: var(--color-on-solid);
+  --color-neutral: var(--color-fg-secondary);
+  --color-neutral-content: var(--color-surface-card);
+  --color-info: var(--color-accent-fg);
+  --color-info-content: var(--color-on-solid);
+  --color-warning: var(--color-warning-fg);
+  --color-warning-content: var(--color-warning-bg);
+  --color-error: var(--color-danger-solid);
+  --color-error-content: var(--color-on-solid);
+  --radius-selector: var(--radius-md);
+  --radius-field: var(--radius-md);
+  --radius-box: var(--radius-xl);
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+
   /* Project and label colours.
      Stored in the database as names ("indigo"), resolved to a value here, so
      the palette can be retuned per theme without rewriting anyone's data.
@@ -212,9 +268,12 @@
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
-  /* The only shadow in the system. It exists to say "lifted", and nothing else
-     in the resting interface is allowed to use it. See docs/design-decisions.md §4. */
-  --shadow-overlay: 0 8px 24px -6px rgb(0 0 0 / 0.18), 0 2px 6px -2px rgb(0 0 0 / 0.12);
+  /* A restrained elevation scale from the approved Visily direction. Panels
+     use the two quiet steps; overlays reserve the stronger shadow. */
+  --shadow-xs: 0 1px 2px rgb(28 32 36 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(28 32 36 / 0.1), 0 1px 2px rgb(28 32 36 / 0.06);
+  --shadow-panel: 0 4px 12px -4px rgb(28 32 36 / 0.14);
+  --shadow-overlay: 0 12px 30px -8px rgb(0 0 0 / 0.24), 0 3px 8px -3px rgb(0 0 0 / 0.16);
 
   /* Z-index layers. These six numbers are the only stacking values in the app. */
   --z-base: 0;
@@ -226,7 +285,10 @@
 }
 
 .dark {
-  --shadow-overlay: 0 8px 24px -6px rgb(0 0 0 / 0.5), 0 2px 6px -2px rgb(0 0 0 / 0.4);
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.22);
+  --shadow-sm: 0 2px 5px rgb(0 0 0 / 0.24);
+  --shadow-panel: 0 8px 20px -8px rgb(0 0 0 / 0.45);
+  --shadow-overlay: 0 14px 34px -8px rgb(0 0 0 / 0.62), 0 4px 10px -3px rgb(0 0 0 / 0.44);
 }
 
 @media (prefers-reduced-motion: reduce) {

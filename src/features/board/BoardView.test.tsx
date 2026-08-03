@@ -114,6 +114,31 @@ function columnNamed(name: string) {
 }
 
 describe("BoardView move failures", () => {
+  it("keeps Add column in the board toolbar and out of the scrolling lanes", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await screen.findByText("Only task");
+
+    const addColumn = screen.getByRole("button", { name: "Add column" });
+    expect(addColumn.closest("[data-board-header]")).not.toBeNull();
+    expect(addColumn.closest("[data-board-scroll]")).toBeNull();
+
+    await user.click(addColumn);
+
+    expect(screen.getByRole("dialog", { name: "New column" })).toBeInTheDocument();
+  });
+
+  it("starts a new task in the intake column from the board toolbar", async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await screen.findByText("Only task");
+
+    await user.click(screen.getByRole("button", { name: "New task" }));
+
+    expect(screen.getByLabelText("New task in Todo")).toHaveFocus();
+    expect(screen.queryByLabelText("New task in Doing")).not.toBeInTheDocument();
+  });
+
   it("puts the card back and says why when the move is refused", async () => {
     // The rollback is the point. An optimistic update with no rollback shows a
     // board that disagrees with the database until something happens to refetch

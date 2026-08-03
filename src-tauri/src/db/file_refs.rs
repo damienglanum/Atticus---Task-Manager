@@ -7,6 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
+use rmcp::schemars::JsonSchema;
 use rusqlite::{Connection, OptionalExtension, Row};
 use serde::Serialize;
 use ts_rs::TS;
@@ -15,7 +16,7 @@ use crate::db::projects::new_id;
 use crate::db::{now_ms, ordering};
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "FileRef.ts")]
 pub struct FileRef {

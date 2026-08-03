@@ -17,6 +17,74 @@ tool, not part of the product.
 
 ---
 
+## Full-width focus page and quiet writing surfaces · 2026-08-03
+
+Reviewed in the native Tauri window at 1280 × 820 and 1920 × 1000. The task
+editor remains a focus-trapped `DialogPage`, but its visible body now occupies
+the full window instead of stopping at a centred 1280px wrapper.
+
+| State                | Result                                                                    |
+| -------------------- | ------------------------------------------------------------------------- |
+| 1280 × 820, dark     | Pass — single work column plus the edge-aligned metadata rail             |
+| 1920 × 1000, dark    | Pass — description and supporting work split cleanly before the rail      |
+| Right rail dividers  | Pass — one separator between Tags and the anchored Atticus mark           |
+| Description and Notes | Pass — no visible Markdown or automatic-preview onboarding hints         |
+
+Measured at 1920px: the main workspace begins at the viewport's left edge,
+the 352px rail ends at its right edge, both meet without a gap, and the document
+has no horizontal overflow. `task-editor-wide.png` records the reviewed state.
+
+---
+
+## Board toolbar and responsive lanes · 2026-08-03
+
+Reviewed in the native Tauri window after the trailing Add column lane was
+removed. The suite rebuilt and photographed the same populated five-column
+board at the real CSS viewport widths below.
+
+| State                 | Result                                                                  |
+| --------------------- | ----------------------------------------------------------------------- |
+| 900 × 700, dark       | Pass — local horizontal scroll; every lane remains at least 260px       |
+| 1280 × 820, dark      | Pass — compact toolbar stays on one line and the page does not overflow |
+| 1680 × 1000, dark     | Pass — all five work lanes fit exactly across the available width       |
+| 1920 × 1080, dark     | Pass — equal lanes, no phantom overflow from a creation affordance      |
+| 2048 × 1080, dark     | Pass — lanes grow past the old 320px cap and meet both padded edges      |
+
+The header is now one context/action line plus the filter rule: project name
+and counts, board tabs, Add column, then New task. `ACTIVE PROJECT` was removed
+because the shell breadcrumb already supplies that context. Add column opens
+the same dialog as before, but no longer occupies a sixth pseudo-lane at the
+end of the scroller.
+
+Measured assertions accompany the screenshots: all lane widths are equal; the
+first and last lanes meet the scroller's padded edges at 1680 and 2048px; the
+board has no internal overflow at 1680, 1920, or 2048px; and at 900px it scrolls
+internally without shrinking a lane below 260px or widening the document.
+
+---
+
+## Splash redesign · 2026-08-03
+
+**Reviewed in a browser at 1280 × 720, not in the native Tauri window.** The
+composition itself measured exactly 560 × 156 and was centred in the viewport.
+The centre-out contour sequence was inspected at its midpoint and after it
+settled; all eight main contour paths were visible in the final frame and the
+console contained no warnings or errors.
+
+| State                         | Result                                                          |
+| ----------------------------- | --------------------------------------------------------------- |
+| Mid-reveal, browser           | Pass — stagger and cyan tracing front remain legible             |
+| Settled composition, browser  | Pass — 560 × 156, centred, all 8 main contour paths visible       |
+| Exact 720 × 320 splash window | Pending — the review used a larger browser viewport              |
+| Native Tauri launch           | Pending — paint order, window hand-off, and desktop flash remain |
+
+The exact 720 × 320 crop and Reduced Motion result are covered structurally by
+the layout and animation code, but were not presented as rendered visual checks
+in this pass. They stay open rather than being inferred from the larger browser
+frame.
+
+---
+
 ## v1.1 — Icons, name, and editor controls · 2026-07-31
 
 Prompted by a screenshot of the real application, which is the first review on
@@ -68,6 +136,13 @@ for the generator: the downscaled row is mud at 32 and effectively blank at 16.
 ---
 
 ## v1.1 — Mark and splash · 2026-07-31
+
+> **Historical composition.** The splash was redesigned on 2026-08-03 as a
+> horizontal Atticus lockup with a 1.65 s centre-out contour reveal. The pass
+> below still documents the earlier supplied-`preview.png` composition; it is
+> not visual evidence for the current splash. The browser review above covers
+> the replacement at 1280 × 720; the exact 720 × 320 viewport and native Tauri
+> launch remain pending.
 
 Reviewed in a browser, as with the two entries below. The splash was reviewed at
 the window's real size (720 × 320); the mark on a purpose-built size ladder —

@@ -5,7 +5,8 @@
 //! the parent — US-13 AC3 rules out hidden automation, and a board that moves
 //! work on its own is a board nobody trusts.
 
-use rusqlite::{Connection, OptionalExtension, Row};
+use rmcp::schemars::JsonSchema;
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -14,7 +15,7 @@ use crate::db::{now_ms, ordering};
 use crate::domain::validate;
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "Subtask.ts")]
 pub struct Subtask {
@@ -108,6 +109,45 @@ pub fn update(conn: &Connection, id: &str, patch: SubtaskPatch) -> AppResult<Sub
         "UPDATE tasks SET updated_at = ?2 WHERE id = ?1",
         rusqlite::params![existing.task_id, now],
     )?;
+
+    find(conn, id)
+}
+
+/// Updates a subtask only when its last-read timestamp is still current.
+///
+/// The immediate transaction keeps the subtask edit and parent-task timestamp
+/// together while preventing another process from slipping an edit between the
+/// version check and the write.
+pub fn update_if_current(
+    conn: &mut Connection,
+    id: &str,
+    patch: SubtaskPatch,
+    expected_updated_at: i64,
+) -> AppResult<Subtask> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let existing = find(&tx, id)?;
+    if existing.updated_at != expected_updated_at {
+        return Err(AppError::Conflict {
+            message: format!(
+                "Subtask {id} changed after it was read (expected updatedAt {expected_updated_at}, current {}). Call atticus_get_task for its parent, reconcile, and retry using the new updatedAt.",
+                existing.updated_at
+            ),
+        });
+    }
+
+    let title = match patch.title {
+        Some(value) => validate::required_text("title", &value, validate::SUBTASK_TITLE_MAX)?,
+        None => existing.title,
+    };
+    let done = patch.done.unwrap_or(existing.done);
+    let updated_at = now_ms().max(existing.updated_at.saturating_add(1));
+
+    tx.execute(
+        "UPDATE subtasks SET title = ?2, done = ?3, updated_at = ?4 WHERE id = ?1",
+        rusqlite::params![id, title, done, updated_at],
+    )?;
+    touch_parent(&tx, &existing.task_id, updated_at)?;
+    tx.commit()?;
 
     find(conn, id)
 }

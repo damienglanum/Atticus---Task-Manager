@@ -16,6 +16,8 @@ export const LIMITS = {
   columnName: 60,
   taskTitle: 500,
   noteTitle: 200,
+  noteBody: 200_000,
+  labelName: 40,
   // Matches `validate::NOTE_TITLE_MAX` and friends in Rust. A name is not stored
   // by the backend at all — it lives in `ui_state` — so this limit exists only
   // to stop a paste of a whole document going into a text field.

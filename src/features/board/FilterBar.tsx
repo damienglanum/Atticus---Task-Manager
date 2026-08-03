@@ -56,11 +56,12 @@ export function FilterBar({
   const facets = activeFacetCount(filter);
   const filtering = facets > 0;
 
-  // `px-5` matches the board header above and the columns below: three rows
-  // that start at three different left edges read as three unrelated bars.
+  // `px-6` matches the compact board toolbar and the columns below. Keeping the
+  // filter strip as the toolbar's second rule makes the whole header read as
+  // one control surface rather than two unrelated bands.
   return (
-    <div className="border-border-subtle flex items-center gap-2 border-b px-5 py-2">
-      <div className="border-border-strong focus-within:border-accent-border focus-within:outline-focus-ring focus-within:outline-2 focus-within:outline-offset-2 flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1">
+    <div className="border-border-subtle bg-surface-app flex items-center gap-1.5 border-y px-6 py-2">
+      <div className="border-border-default focus-within:border-accent-border focus-within:outline-focus-ring focus-within:outline-2 focus-within:outline-offset-2 flex w-44 min-w-0 items-center gap-2 rounded-sm border px-2.5 py-0.5">
         <Search size={12} aria-hidden className="text-fg-secondary shrink-0" />
         <input
           type="text"
@@ -130,7 +131,7 @@ export function FilterBar({
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <Button>
+          <Button size="sm">
             <Bookmark size={12} aria-hidden />
             Saved
             {savedFilters.length === 0 ? null : ` (${String(savedFilters.length)})`}
@@ -190,6 +191,7 @@ export function FilterBar({
               : `${String(matching)} of ${String(total)} tasks`}
           </p>
           <Button
+            size="sm"
             onClick={() => {
               onChange({ text: "", columnIds: [], priorities: [], labelIds: [], due: [] });
             }}
@@ -219,7 +221,10 @@ function FacetMenu({
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <Button className={chosen > 0 ? "border-accent-border text-accent-fg" : undefined}>
+        <Button
+          size="sm"
+          className={chosen > 0 ? "border-accent-border text-accent-fg" : undefined}
+        >
           {name}
           {chosen === 0 ? null : ` (${String(chosen)})`}
         </Button>

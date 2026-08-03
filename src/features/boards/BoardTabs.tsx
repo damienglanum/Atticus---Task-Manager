@@ -36,7 +36,7 @@ export function BoardTabs({
   const selectedBoard = boards.find((board) => board.id === selectedId) ?? null;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1">
       {/* Only tabs live in here.
 
           The actions menu and "New board" used to sit inside the tablist, which
@@ -44,7 +44,11 @@ export function BoardTabs({
           landed inside this one repeatedly instead of moving past it. Found by
           the keyboard-order assertion in `e2e/specs/accessibility.e2e.ts` on its
           first run. */}
-      <div className="flex items-center gap-1" role="tablist" aria-label="Boards">
+      <div
+        className="dui-tabs border-border-default flex min-w-0 items-center gap-1 overflow-x-auto border-b"
+        role="tablist"
+        aria-label="Boards"
+      >
         {boards.map((board) => {
           const selected = board.id === selectedId;
           return (
@@ -58,10 +62,10 @@ export function BoardTabs({
                 onSelect(board);
               }}
               className={cn(
-                "cursor-default rounded-md px-2 py-1 text-xs",
+                "dui-tab min-h-8 shrink-0 cursor-default rounded-none border-b-2 border-transparent px-2.5 py-1.5 text-xs",
                 selected
-                  ? "bg-accent-bg text-accent-fg font-medium"
-                  : "text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary",
+                  ? "dui-tab-active border-accent-solid text-fg-primary font-medium"
+                  : "text-fg-secondary hover:text-fg-primary",
               )}
             >
               {board.name}

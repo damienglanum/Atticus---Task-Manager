@@ -35,7 +35,10 @@ function readDirectory(dir) {
 }
 
 try {
-  execFileSync("cargo", ["test", "--quiet"], {
+  // Binding generation runs every Rust test. Keep it single-threaded so the
+  // repository's latency-budget tests measure database work rather than
+  // competing with hundreds of unrelated test databases on the same machine.
+  execFileSync("cargo", ["test", "--quiet", "--", "--test-threads=1"], {
     cwd: join(root, "src-tauri"),
     env: { ...process.env, PATH: pathWithCargo(), TS_RS_EXPORT_DIR: scratch },
     stdio: ["ignore", "ignore", "inherit"],

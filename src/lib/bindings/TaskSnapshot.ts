@@ -7,4 +7,4 @@ import type { Task } from "./Task";
 /**
  * A task and every row that `ON DELETE CASCADE` would take with it.
  */
-export type TaskSnapshot = { task: Task, subtasks: Array<SubtaskRow>, labelIds: Array<string>, fileRefs: Array<FileRefRow>, linkRefs: Array<LinkRefRow>, };
+export type TaskSnapshot = { task: Task, subtasks: Array<SubtaskRow>, labelIds: Array<string>, fileRefs: Array<FileRefRow>, linkRefs: Array<LinkRefRow>, noteTaskLinks: Array<{ noteId: string, position: number, createdAt: number, }>, };

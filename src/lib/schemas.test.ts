@@ -94,9 +94,9 @@ describe("limits agree with the Rust validator", () => {
   );
 
   function rustConst(name: string): number {
-    const match = new RegExp(`pub const ${name}: usize = (\\d+);`).exec(source);
+    const match = new RegExp(`pub const ${name}: usize = ([\\d_]+);`).exec(source);
     if (match?.[1] === undefined) throw new Error(`could not find ${name} in validate.rs`);
-    return Number(match[1]);
+    return Number(match[1].replaceAll("_", ""));
   }
 
   it.each([
@@ -105,6 +105,9 @@ describe("limits agree with the Rust validator", () => {
     ["BOARD_NAME_MAX", LIMITS.boardName],
     ["COLUMN_NAME_MAX", LIMITS.columnName],
     ["TASK_TITLE_MAX", LIMITS.taskTitle],
+    ["NOTE_TITLE_MAX", LIMITS.noteTitle],
+    ["NOTE_BODY_MAX", LIMITS.noteBody],
+    ["LABEL_NAME_MAX", LIMITS.labelName],
     ["KEY_PREFIX_MIN", LIMITS.keyPrefixMin],
     ["KEY_PREFIX_MAX", LIMITS.keyPrefixMax],
   ])("%s matches", (rustName, tsValue) => {

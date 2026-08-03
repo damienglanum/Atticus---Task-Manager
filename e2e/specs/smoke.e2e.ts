@@ -12,6 +12,8 @@ import {
   createProject,
   dialogNamed,
   openSettings,
+  projectDestination,
+  projectDisclosure,
   projectInSidebar,
   setViewportWidth,
 } from "../support/app.js";
@@ -32,8 +34,13 @@ describe("smoke", () => {
 
   it("selects the restored project rather than starting blank", async () => {
     // The workspace row records the last opened project, so a restart should
-    // land on it. This is US-5 exercised end to end.
-    await expect(projectInSidebar(PROJECT_NAME)).toHaveAttribute("aria-current", "true");
+    // land on its expanded branch and mark its board destination as current.
+    // This is US-5 exercised end to end through the new project hierarchy.
+    await expect(projectDisclosure(PROJECT_NAME)).toHaveAttribute("aria-expanded", "true");
+    await expect(projectDestination(PROJECT_NAME, "Board View")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("remains usable in a narrow window", async () => {

@@ -12,6 +12,9 @@
       :root {
         --splash-background: #0b0c0d;
         --splash-stroke: #dedede;
+        --splash-muted: #8b9298;
+        --splash-accent: #4ccce6;
+        --splash-rule: #292d30;
       }
 
       html,
@@ -25,6 +28,14 @@
       body {
         display: grid;
         place-items: center;
+        color: var(--splash-stroke);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
         /* A window with no chrome should not look like a web page: no text
            selection, no caret, no rubber-banding. */
         user-select: none;
@@ -33,17 +44,135 @@
       }
 
       #splash {
-        width: 66vmin;
-        height: 66vmin;
+        width: min(560px, calc(100vw - 72px));
       }
 
-      #splash svg {
+      .splash-composition {
+        display: grid;
+        grid-template-columns: 156px 1px minmax(0, 1fr);
+        align-items: center;
+        gap: 30px;
+      }
+
+      .splash-mark {
+        position: relative;
+        width: 156px;
+        height: 156px;
+        isolation: isolate;
+      }
+
+      .splash-halo {
+        position: absolute;
+        inset: 12%;
+        z-index: -1;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgb(76 204 230 / 18%) 0%, transparent 70%);
+        filter: blur(12px);
+        opacity: 0.65;
+        animation: halo-breathe 2.4s ease-in-out 1.5s infinite alternate;
+      }
+
+      .splash-mark svg {
         width: 100%;
         height: 100%;
+        overflow: visible;
       }
 
-      #splash path {
+      .contour-track {
+        stroke: var(--splash-stroke);
+        opacity: 0.075;
+      }
+
+      .contour-main,
+      .contour-glow {
+        stroke: var(--splash-stroke);
+      }
+
+      .contour-glow {
+        stroke: var(--splash-accent);
+        filter: url(#contour-glow);
+      }
+
+      .contour-main path,
+      .contour-glow path {
         opacity: 0;
+      }
+
+      .splash-rule {
+        width: 1px;
+        height: 116px;
+        background: linear-gradient(
+          to bottom,
+          transparent,
+          var(--splash-rule) 14%,
+          var(--splash-rule) 86%,
+          transparent
+        );
+        transform-origin: center;
+      }
+
+      .splash-copy {
+        min-width: 0;
+      }
+
+      .splash-wordmark {
+        margin: 0;
+        color: var(--splash-stroke);
+        font-size: 30px;
+        font-weight: 600;
+        line-height: 1;
+        letter-spacing: -0.035em;
+      }
+
+      .splash-context {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin: 14px 0 0;
+        color: var(--splash-muted);
+        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 9px;
+        font-weight: 500;
+        line-height: 1.4;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .splash-context-dot {
+        width: 5px;
+        height: 5px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: var(--splash-accent);
+        box-shadow: 0 0 12px rgb(76 204 230 / 45%);
+        animation: status-breathe 1.8s ease-in-out 1.7s infinite alternate;
+      }
+
+      @keyframes halo-breathe {
+        from {
+          opacity: 0.5;
+          transform: scale(0.96);
+        }
+        to {
+          opacity: 0.78;
+          transform: scale(1.04);
+        }
+      }
+
+      @keyframes status-breathe {
+        from {
+          opacity: 0.55;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .splash-halo,
+        .splash-context-dot {
+          animation: none;
+        }
       }
     </style>
   </head>

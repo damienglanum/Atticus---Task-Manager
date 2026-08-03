@@ -101,10 +101,14 @@ describe("the board", () => {
   });
 
   it("adds a column and sets a work-in-progress limit on it", async () => {
-    await $("button=Add a column").click();
-    await $('div[role="dialog"]').waitForDisplayed();
-    await $("#column-form input").setValue("Blocked");
-    await $("button=Add column").click();
+    const toolbar = $("[data-board-header]");
+    await toolbar.$("button=Add column").click();
+
+    const dialog = $('div[role="dialog"]');
+    await dialog.waitForDisplayed();
+    await expect($("[data-board-scroll]").$("button=Add column")).not.toExist();
+    await dialog.$("#column-form input").setValue("Blocked");
+    await dialog.$("button=Add column").click();
 
     await expect(columnNamed("Blocked")).toBeDisplayed();
   });

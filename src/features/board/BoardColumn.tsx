@@ -89,35 +89,34 @@ export function BoardColumn({
       aria-labelledby={headingId}
       ref={setNodeRef}
       className={cn(
-        // Grows to share whatever width is going, within limits: a fixed 18rem
-        // left most of a wide display empty while still scrolling, and letting
-        // columns grow without a ceiling makes a two-column board absurd.
-        "bg-surface-column flex min-w-72 flex-1 shrink-0 basis-80 flex-col rounded-xl border",
-        "max-w-104",
+        // The lane fills the board before it scrolls, but never becomes too
+        // narrow to read or absurdly wide. Five lanes fit a wide workspace now
+        // that Add column no longer consumes its own lane.
+        "bg-surface-column flex min-w-[16.25rem] max-w-96 flex-1 shrink-0 basis-64 flex-col rounded-sm border-x border-b border-t-2",
         // Three signals for a breached limit, only one of which is colour: a
         // heavier border, a warning glyph, and the count itself (US-7 AC2).
-        overLimit ? "border-warning-border" : "border-border-subtle",
+        overLimit
+          ? "border-x-warning-border border-b-warning-border border-t-warning-fg"
+          : "border-border-subtle border-t-border-default",
         isOver && "bg-surface-sunken",
       )}
     >
-      <header className="flex items-center gap-2 px-3 pt-3 pb-2">
+      <header className="border-border-subtle flex items-center gap-2 border-b px-3.5 py-3">
         {overLimit ? (
           <AlertTriangle size={13} aria-hidden className="text-warning-fg shrink-0" />
         ) : null}
 
         <h3
           id={headingId}
-          className="text-fg-primary truncate text-xs font-semibold tracking-[0.08em] uppercase"
+          className="text-fg-primary truncate text-xs font-semibold tracking-[0.06em] uppercase"
         >
           {column.name}
         </h3>
 
         <span
           className={cn(
-            "shrink-0 rounded px-1.5 py-0.5 text-2xs",
-            overLimit
-              ? "text-warning-fg bg-warning-bg font-semibold"
-              : "text-fg-secondary bg-surface-sunken",
+            "shrink-0 font-mono text-2xs",
+            overLimit ? "text-warning-fg font-semibold" : "text-fg-secondary",
           )}
           data-numeric
         >
@@ -215,7 +214,7 @@ export function BoardColumn({
       ) : null}
 
       <SortableContext items={tasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-        <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+        <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-2.5 py-2.5">
           {tasks.map((task, index) => (
             <TaskCard
               key={task.id}
@@ -257,7 +256,7 @@ export function BoardColumn({
           onClick={() => {
             onComposingChange(true);
           }}
-          className="text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary m-2 mt-0 flex cursor-default items-center gap-2 rounded-md px-2 py-2 text-left text-sm"
+          className="border-border-subtle text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary mx-2.5 mb-2.5 flex cursor-default items-center gap-2 border-t px-1 py-2.5 text-left text-sm"
         >
           <Plus size={14} aria-hidden />
           Add a task

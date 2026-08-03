@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, FileLock2, ShieldCheck, SquareTerminal } from "lucide-react";
+import { SquareTerminal } from "lucide-react";
 
 import { notifyError } from "@/app/toast";
 import type { McpAccess } from "@/lib/bindings/McpAccess";
@@ -8,14 +8,28 @@ import { cn } from "@/lib/cn";
 import { describeAppError, toAppError } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
 import { queryKeys } from "@/lib/query/keys";
+import { SettingsBlock, SettingsStatus } from "./SettingsPrimitives";
 
-const ACCESS: { value: McpAccess; label: string; detail: string }[] = [
-  { value: "disabled", label: "Off", detail: "No task data is available." },
-  { value: "read_only", label: "Read only", detail: "AI can inspect and search." },
+const ACCESS: { value: McpAccess; code: string; label: string; detail: string }[] = [
+  {
+    value: "disabled",
+    code: "00",
+    label: "Off",
+    detail: "No tasks, project-note bodies, or workspace metadata are available.",
+  },
+  {
+    value: "read_only",
+    code: "RO",
+    label: "Read only",
+    detail:
+      "Clients may inspect tasks, workspace metadata, and full project-note bodies, but cannot change anything.",
+  },
   {
     value: "read_write",
+    code: "RW",
     label: "Read & write",
-    detail: "AI can write inside AI Boards only.",
+    detail:
+      "Clients may read the workspace and change tasks or notes only inside projects created through AI Boards.",
   },
 ];
 
@@ -32,6 +46,9 @@ export function McpPanel() {
   const save = useMutation({
     mutationFn: (next: McpSettings) => ipc.mcpSettingsSet(next),
     onSuccess: (updated) => {
+      // App.tsx reads this exact cache entry to decide whether AI Boards is
+      // present in the sidebar. Updating it here makes the security boundary
+      // and its navigation affordance change together.
       client.setQueryData(queryKeys.mcpSettings(), updated);
     },
     onError: (error: unknown) => {
@@ -42,7 +59,7 @@ export function McpPanel() {
   const value = settings.data;
 
   function setAccess(access: McpAccess) {
-    if (value === undefined) return;
+    if (value === undefined || value.access === access) return;
     save.mutate({
       access,
       allowFileAttachments: access === "read_write" && value.allowFileAttachments,
@@ -50,152 +67,177 @@ export function McpPanel() {
   }
 
   return (
-    <div className="border-border-subtle divide-y divide-(--color-border-subtle) border-y">
-      <section className="py-4">
-        <div className="flex items-start gap-3">
-          <span className="text-accent-fg flex size-6 shrink-0 items-center justify-center">
-            <ShieldCheck size={15} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-fg-primary text-sm font-semibold">Permission</h3>
-            <p className="text-fg-secondary mt-1 text-xs">
-              Atticus enforces this policy itself on every tool call, even if an AI client does not
-              ask for confirmation.
-            </p>
-            <div className="border-accent-border bg-accent-bg mt-3 rounded-lg border px-3 py-2.5">
-              <p className="text-accent-fg text-xs font-semibold">AI Boards sandbox</p>
-              <p className="text-fg-secondary mt-1 text-2xs leading-relaxed">
-                MCP can create and change work only in projects it created itself. Existing and
-                user-created projects are always write-protected, even when Read &amp; write is on.
-                You keep the normal create, rename, and remove controls inside AI Boards.
-              </p>
+    <div className="border-border-default mt-7 border-t">
+      <SettingsBlock
+        marker="01"
+        title="Access policy"
+        description="Atticus enforces this boundary on every tool call, even when the connected client asks for more. Changes take effect immediately."
+      >
+        {settings.isError ? (
+          <p role="alert" className="text-danger-fg text-xs">
+            AI access could not be read.
+          </p>
+        ) : value === undefined ? (
+          <p role="status" className="text-fg-secondary text-xs">
+            Reading AI access…
+          </p>
+        ) : (
+          <fieldset
+            className="border-border-default m-0 max-w-3xl border-x-0 border-y border-solid p-0"
+            disabled={save.isPending}
+          >
+            <legend className="sr-only">MCP access level</legend>
+            {ACCESS.map((choice) => {
+              const selected = value.access === choice.value;
+              return (
+                <label
+                  key={choice.value}
+                  className={cn(
+                    "border-border-subtle relative grid w-full cursor-default grid-cols-[2rem_minmax(0,1fr)_1rem] items-center gap-3 border-b px-3 py-3 text-left last:border-b-0",
+                    "has-disabled:pointer-events-none has-disabled:opacity-50",
+                    "has-focus-visible:outline-focus-ring has-focus-visible:outline-2 has-focus-visible:-outline-offset-2",
+                    selected ? "bg-surface-sunken" : "hover:bg-surface-column",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="mcp-access"
+                    value={choice.value}
+                    checked={selected}
+                    onChange={() => {
+                      setAccess(choice.value);
+                    }}
+                    className="sr-only"
+                  />
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "font-mono text-2xs font-medium tracking-[0.08em]",
+                      selected ? "text-accent-fg" : "text-fg-secondary",
+                    )}
+                  >
+                    {choice.code}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="text-fg-primary block text-xs font-semibold">
+                      {choice.label}
+                    </span>
+                    <span className="text-fg-secondary mt-0.5 block text-2xs">{choice.detail}</span>
+                  </span>
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "border-border-strong flex size-4 items-center justify-center rounded-full border",
+                      selected && "border-accent-fg",
+                    )}
+                  >
+                    {selected ? <span className="bg-accent-fg size-2 rounded-full" /> : null}
+                  </span>
+                  {selected ? (
+                    <span aria-hidden className="bg-accent-solid absolute inset-y-2 left-0 w-0.5" />
+                  ) : null}
+                </label>
+              );
+            })}
+          </fieldset>
+        )}
+
+        <div className="border-accent-fg mt-5 max-w-3xl border-l-2 py-0.5 pl-4">
+          <p className="text-accent-fg font-mono text-2xs font-semibold tracking-[0.08em] uppercase">
+            AI Boards boundary
+          </p>
+          <p className="text-fg-secondary mt-1 text-xs leading-relaxed">
+            MCP can create and change tasks and project notes only in projects it created itself.
+            Existing and user-created projects remain write-protected, including when Read &amp;
+            write is active.
+          </p>
+        </div>
+      </SettingsBlock>
+
+      <SettingsBlock
+        marker="02"
+        title="File references"
+        description="A separate safeguard for attaching paths. The server can reference an existing file inside the task project's configured folder, but it never reads or uploads the contents."
+        status={
+          value?.access === "read_write" ? undefined : (
+            <span className="text-fg-secondary font-mono text-2xs tracking-[0.05em] uppercase">
+              Requires read &amp; write
+            </span>
+          )
+        }
+      >
+        <label
+          className={cn(
+            "border-border-default inline-flex min-h-9 items-center gap-3 rounded-md border px-3 text-xs",
+            value?.access === "read_write"
+              ? "bg-surface-app text-fg-primary"
+              : "bg-surface-sunken text-fg-secondary opacity-60",
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={value?.allowFileAttachments ?? false}
+            disabled={value?.access !== "read_write" || save.isPending}
+            onChange={(event) => {
+              if (value === undefined) return;
+              save.mutate({ ...value, allowFileAttachments: event.target.checked });
+            }}
+            className="dui-checkbox dui-checkbox-sm border-border-strong rounded-sm"
+          />
+          Allow AI to add file references
+        </label>
+      </SettingsBlock>
+
+      <SettingsBlock
+        marker="03"
+        title="Model instructions"
+        description="Every connection receives the Atticus workflow guide automatically: inspect before writing, preserve task and note context, and mark work Done only after verification succeeds."
+        status={<SettingsStatus>Included</SettingsStatus>}
+      />
+
+      <SettingsBlock
+        marker="04"
+        title="Client connection"
+        description="Register Atticus as a local stdio server in Codex, Claude, or another MCP client using the executable and arguments below."
+        status={<SettingsStatus>Local stdio</SettingsStatus>}
+      >
+        {launch.isError ? (
+          <p role="alert" className="text-danger-fg text-xs">
+            The local launch configuration could not be read.
+          </p>
+        ) : launch.data === undefined ? (
+          <p role="status" className="text-fg-secondary text-xs">
+            Locating Atticus…
+          </p>
+        ) : (
+          <div className="border-border-default bg-surface-sunken max-w-4xl overflow-hidden rounded-md border">
+            <div className="border-border-subtle text-fg-secondary flex items-center justify-between gap-4 border-b px-3 py-2 font-mono text-[9px] tracking-[0.1em] uppercase">
+              <span className="flex items-center gap-2">
+                <SquareTerminal size={12} strokeWidth={1.75} aria-hidden />
+                Server definition
+              </span>
+              <span>stdio / local</span>
             </div>
-
-            {value === undefined ? (
-              <p role="status" className="text-fg-secondary mt-4 text-xs">
-                Reading AI access…
-              </p>
-            ) : (
-              <div className="mt-4 grid gap-2 sm:grid-cols-3" aria-label="MCP access level">
-                {ACCESS.map((choice) => {
-                  const selected = value.access === choice.value;
-                  return (
-                    <button
-                      key={choice.value}
-                      type="button"
-                      aria-pressed={selected}
-                      disabled={save.isPending}
-                      onClick={() => {
-                        setAccess(choice.value);
-                      }}
-                      className={cn(
-                        "min-h-16 rounded-lg border px-3 py-2 text-left transition-colors",
-                        "disabled:pointer-events-none disabled:opacity-50",
-                        selected
-                          ? "border-accent-border bg-accent-bg"
-                          : "border-border-subtle bg-surface-card hover:border-border-strong",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "block text-xs font-semibold",
-                          selected ? "text-accent-fg" : "text-fg-primary",
-                        )}
-                      >
-                        {choice.label}
-                      </span>
-                      <span className="text-fg-secondary mt-1 block text-2xs">{choice.detail}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            <dl className="divide-border-subtle divide-y">
+              <ConnectionRow label="Command" value={launch.data.command} />
+              <ConnectionRow label="Arguments" value={launch.data.args.join(" ")} />
+            </dl>
           </div>
-        </div>
-      </section>
+        )}
+      </SettingsBlock>
+    </div>
+  );
+}
 
-      <section className="py-4">
-        <div className="flex items-start gap-3">
-          <span className="text-accent-fg flex size-6 shrink-0 items-center justify-center">
-            <FileLock2 size={15} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-fg-primary text-sm font-semibold">File references</h3>
-            <p className="text-fg-secondary mt-1 text-xs">
-              A separate safeguard. The server can only reference existing files inside the task
-              project&rsquo;s configured folder; it never reads or uploads their contents.
-            </p>
-            <label className="mt-3 flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={value?.allowFileAttachments ?? false}
-                disabled={value?.access !== "read_write" || save.isPending}
-                onChange={(event) => {
-                  if (value === undefined) return;
-                  save.mutate({ ...value, allowFileAttachments: event.target.checked });
-                }}
-                className="accent-(--color-accent-solid) size-4"
-              />
-              <span className="text-fg-primary">Allow AI to add file references</span>
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-4">
-        <div className="flex items-start gap-3">
-          <span className="text-accent-fg flex size-6 shrink-0 items-center justify-center">
-            <CheckCircle2 size={15} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-fg-primary text-sm font-semibold">Workflow rules included</h3>
-            <p className="text-fg-secondary mt-1 text-xs">
-              Every connection receives Atticus instructions automatically: inspect before writing,
-              start accepted work in In Progress, keep focus-mode details current, and move to Done
-              only after verification succeeds.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-4">
-        <div className="flex items-start gap-3">
-          <span className="text-accent-fg flex size-6 shrink-0 items-center justify-center">
-            <SquareTerminal size={15} aria-hidden />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-fg-primary text-sm font-semibold">Connect an MCP client</h3>
-            <p className="text-fg-secondary mt-1 text-xs">
-              Add a local stdio server named Atticus in Codex, Claude, or another MCP client using
-              this command and argument.
-            </p>
-            {launch.data === undefined ? (
-              <p role="status" className="text-fg-secondary mt-3 text-xs">
-                Locating Atticus…
-              </p>
-            ) : (
-              <dl className="mt-3 grid gap-2 text-xs">
-                <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-baseline">
-                  <dt className="text-fg-secondary">Command</dt>
-                  <dd>
-                    <code className="bg-surface-sunken text-fg-primary block select-all overflow-x-auto rounded-md px-2 py-1.5">
-                      {launch.data.command}
-                    </code>
-                  </dd>
-                </div>
-                <div className="grid gap-1 sm:grid-cols-[5rem_minmax(0,1fr)] sm:items-baseline">
-                  <dt className="text-fg-secondary">Arguments</dt>
-                  <dd>
-                    <code className="bg-surface-sunken text-fg-primary block select-all rounded-md px-2 py-1.5">
-                      {launch.data.args.join(" ")}
-                    </code>
-                  </dd>
-                </div>
-              </dl>
-            )}
-          </div>
-        </div>
-      </section>
+function ConnectionRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 px-3 py-2.5 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-baseline sm:gap-4">
+      <dt className="text-fg-secondary font-mono text-[9px] tracking-[0.08em] uppercase">
+        {label}
+      </dt>
+      <dd className="text-fg-primary min-w-0 break-all font-mono text-2xs" data-selectable>
+        {value}
+      </dd>
     </div>
   );
 }

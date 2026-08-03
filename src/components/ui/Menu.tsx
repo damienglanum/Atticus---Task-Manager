@@ -30,7 +30,7 @@ export function MenuContent({
       sideOffset={4}
       style={{ zIndex: "var(--z-dropdown)" }}
       className={cn(
-        "bg-surface-raised border-border-default min-w-44 rounded-md border p-1 shadow-(--shadow-overlay)",
+        "dui-menu dui-menu-sm bg-surface-raised border-border-default min-w-44 rounded-xl border p-1 shadow-(--shadow-overlay)",
         className,
       )}
     >
@@ -50,7 +50,7 @@ export function MenuContent({
  * menu is on" and splitting it would mean two ideas of what is focused.
  */
 const ITEM = cn(
-  "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none",
+  "flex cursor-default items-center gap-2 rounded-lg px-2 py-1.5 text-xs outline-none",
   // `outline-solid` is not redundant beside `outline-2`: `outline-none` above
   // sets Tailwind's `--tw-outline-style` to `none` unconditionally, so a width
   // on its own produced a 2 px outline with no style and nothing was drawn.

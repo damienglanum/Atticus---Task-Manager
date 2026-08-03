@@ -68,6 +68,7 @@ describe("BoardTabs", () => {
       (button) => button.getAttribute("tabindex") !== "-1",
     );
 
+    expect(tablist.querySelectorAll('button:not([role="tab"])')).toHaveLength(0);
     expect(stops).toHaveLength(1);
     expect(stops[0]).toHaveAccessibleName("Ideas");
   });

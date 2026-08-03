@@ -24,6 +24,7 @@ function hit(overrides: Partial<SearchHit> = {}): SearchHit {
     boardName: "Board",
     columnName: "Todo",
     archived: false,
+    writable: false,
     excerpt: "",
     ...overrides,
   };

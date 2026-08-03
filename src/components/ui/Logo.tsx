@@ -20,7 +20,7 @@ interface LogoMarkProps {
  * cheating.
  */
 export function LogoMark({ size = 28, className }: LogoMarkProps) {
-  const { rings, viewBox, strokeWidth } = markGeometry(size);
+  const { rings, viewBox, strokeWidth, offsetX, offsetY } = markGeometry(size);
 
   return (
     <svg
@@ -32,6 +32,11 @@ export function LogoMark({ size = 28, className }: LogoMarkProps) {
       className={cn("shrink-0", className)}
     >
       <g
+        transform={
+          offsetX === 0 && offsetY === 0
+            ? undefined
+            : `translate(${String(offsetX)} ${String(offsetY)})`
+        }
         stroke="currentColor"
         strokeWidth={strokeWidth}
         strokeLinecap="round"
@@ -54,9 +59,14 @@ export function LogoMark({ size = 28, className }: LogoMarkProps) {
  */
 export function Wordmark() {
   return (
-    <div className="flex items-center gap-2.5">
-      <LogoMark size={26} className="text-accent-fg" />
-      <span className="text-fg-primary text-lg font-semibold tracking-[-0.01em]">Atticus</span>
+    <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-x-3">
+      <LogoMark size={36} className="text-accent-fg row-span-2 place-self-center" />
+      <span className="text-fg-primary self-end text-lg leading-none font-semibold tracking-[-0.035em]">
+        Atticus
+      </span>
+      <span className="text-fg-secondary mt-1.5 self-start font-mono text-[9px] leading-none font-medium tracking-[0.12em] uppercase">
+        Local workspace
+      </span>
     </div>
   );
 }

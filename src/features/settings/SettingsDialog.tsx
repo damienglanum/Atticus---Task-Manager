@@ -1,21 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  CheckCircle2,
-  DatabaseBackup,
-  HardDrive,
-  Info,
-  Bot,
-  Palette,
-  RefreshCw,
-  SlidersHorizontal,
-} from "lucide-react";
+import { Bot, DatabaseBackup, HardDrive, Info, SlidersHorizontal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
-import type { ReactNode } from "react";
 
 import { notify, notifyError } from "@/app/toast";
+import { BlurFade } from "@/components/magicui/BlurFade";
 import { Button } from "@/components/ui/Button";
-import { Dialog } from "@/components/ui/Dialog";
+import { DialogPage } from "@/components/ui/Dialog";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
 import { cn } from "@/lib/cn";
@@ -25,6 +16,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { DataPanel } from "./DataPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { McpPanel } from "./McpPanel";
+import { SettingsBlock, SettingsStatus } from "./SettingsPrimitives";
 import { ThemeControl } from "./ThemeControl";
 
 interface SettingsDialogProps {
@@ -40,11 +32,41 @@ interface SettingsDialogProps {
 
 type SettingsSection = "general" | "ai" | "data" | "about";
 
-const SECTIONS: { id: SettingsSection; label: string; icon: LucideIcon }[] = [
-  { id: "general", label: "General", icon: SlidersHorizontal },
-  { id: "ai", label: "AI access", icon: Bot },
-  { id: "data", label: "Data", icon: HardDrive },
-  { id: "about", label: "About", icon: Info },
+const SECTIONS: {
+  id: SettingsSection;
+  label: string;
+  eyebrow: string;
+  description: string;
+  icon: LucideIcon;
+}[] = [
+  {
+    id: "general",
+    label: "General",
+    eyebrow: "Workspace preferences",
+    description: "Set the appearance and update behaviour for this copy of Atticus.",
+    icon: SlidersHorizontal,
+  },
+  {
+    id: "ai",
+    label: "AI access",
+    eyebrow: "Local MCP boundary",
+    description: "Decide what connected AI clients may inspect or change on this device.",
+    icon: Bot,
+  },
+  {
+    id: "data",
+    label: "Data",
+    eyebrow: "Portable archive",
+    description: "Back up, move, and restore the local workspace without a cloud account.",
+    icon: HardDrive,
+  },
+  {
+    id: "about",
+    label: "About",
+    eyebrow: "Installation record",
+    description: "Version, platform, and storage details for this installation.",
+    icon: Info,
+  },
 ];
 
 export function SettingsDialog({
@@ -58,8 +80,13 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
   const client = useQueryClient();
   const [section, setSection] = useState<SettingsSection>("general");
+  const activeSection = SECTIONS.find((item) => item.id === section);
 
-  const appInfo = useQuery({ queryKey: queryKeys.appInfo(), queryFn: () => ipc.appInfo() });
+  const appInfo = useQuery({
+    queryKey: queryKeys.appInfo(),
+    queryFn: () => ipc.appInfo(),
+    enabled: open,
+  });
   const databaseInfo = useQuery({
     queryKey: queryKeys.databaseInfo(),
     queryFn: () => ipc.databaseInfo(),
@@ -78,97 +105,132 @@ export function SettingsDialog({
     },
   });
 
+  // `section` is a closed union backed by SECTIONS. Keeping the guard makes
+  // that invariant explicit without relying on a non-null assertion.
+  if (activeSection === undefined) return null;
+
   return (
-    <Dialog
+    <DialogPage
       open={open}
       onOpenChange={onOpenChange}
       title="Settings"
       description="Personalize Atticus and manage the data stored on this device."
-      contentClassName="w-[min(52rem,calc(100vw-2rem))]"
+      breadcrumb={
+        <p className="text-fg-secondary font-mono text-[9px] tracking-[0.12em] uppercase">
+          Atticus / local preferences
+        </p>
+      }
+      backLabel="Return to the workspace"
     >
-      <div className="grid min-h-[29rem] gap-5 md:grid-cols-[10rem_minmax(0,1fr)]">
-        <nav aria-label="Settings sections" className="md:border-border-subtle md:border-r md:pr-4">
-          <ul className="flex gap-1 md:flex-col">
-            {SECTIONS.map((item) => {
-              const Icon = item.icon;
-              const selected = section === item.id;
+      <div className="grid min-h-full md:grid-cols-[15rem_minmax(0,1fr)]">
+        <aside className="border-border-subtle bg-surface-sidebar flex flex-col border-b md:sticky md:top-0 md:min-h-[calc(100vh-4rem)] md:border-r md:border-b-0">
+          <div className="px-5 pt-7 pb-5">
+            <p className="text-accent-fg font-mono text-2xs font-semibold tracking-[0.14em] uppercase">
+              Preference index
+            </p>
+            <p className="text-fg-secondary mt-2 text-xs">Configuration for this working copy.</p>
+          </div>
 
-              return (
-                <li key={item.id} className="min-w-0 flex-1 md:flex-none">
-                  <button
-                    type="button"
-                    aria-current={selected ? "page" : undefined}
-                    onClick={() => {
-                      setSection(item.id);
-                    }}
-                    className={cn(
-                      "flex w-full cursor-default items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm",
-                      "transition-colors duration-(--duration-fast)",
-                      selected
-                        ? "bg-accent-bg text-accent-fg font-medium"
-                        : "text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary",
-                    )}
+          <nav aria-label="Settings sections" className="border-border-subtle border-t">
+            <ul className="grid grid-cols-2 md:block">
+              {SECTIONS.map((item, index) => {
+                const Icon = item.icon;
+                const selected = section === item.id;
+
+                return (
+                  <li key={item.id} className="min-w-0">
+                    <button
+                      type="button"
+                      aria-label={item.label}
+                      aria-current={selected ? "page" : undefined}
+                      onClick={() => {
+                        setSection(item.id);
+                      }}
+                      className={cn(
+                        "border-border-subtle relative grid w-full cursor-default grid-cols-[1.5rem_1.25rem_minmax(0,1fr)] items-center gap-2 border-b px-5 py-3.5 text-left text-sm",
+                        "transition-colors duration-(--duration-fast)",
+                        selected
+                          ? "bg-surface-sunken text-fg-primary font-medium"
+                          : "text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary",
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        data-numeric
+                        className={cn(
+                          "font-mono text-[9px] tracking-[0.08em]",
+                          selected ? "text-accent-fg" : "text-fg-secondary",
+                        )}
+                      >
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <Icon
+                        size={14}
+                        strokeWidth={1.75}
+                        aria-hidden
+                        className={selected ? "text-accent-fg" : undefined}
+                      />
+                      <span className="truncate">{item.label}</span>
+                      {selected ? (
+                        <span
+                          aria-hidden
+                          className="bg-accent-solid absolute inset-y-2 left-0 w-0.5"
+                        />
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          <div className="border-border-subtle mt-auto hidden border-t px-5 py-5 md:block">
+            <p className="text-fg-secondary font-mono text-[9px] tracking-[0.12em] uppercase">
+              Atticus / local only
+            </p>
+            <p className="text-fg-secondary mt-2 text-2xs leading-relaxed">
+              Preferences and workspace data remain on this device.
+            </p>
+          </div>
+        </aside>
+
+        <main className="min-w-0">
+          <BlurFade key={section} className="min-h-full px-6 py-8 lg:px-10 xl:px-12">
+            <div className="w-full">
+              <SettingsPageHeader
+                marker={String(SECTIONS.indexOf(activeSection) + 1).padStart(2, "0")}
+                title={activeSection.label}
+                eyebrow={activeSection.eyebrow}
+                description={activeSection.description}
+              />
+
+              {section === "general" ? (
+                <div className="border-border-default mt-7 border-t">
+                  <SettingsBlock
+                    marker="01"
+                    title="Appearance"
+                    description="Choose a light or dark workspace, or keep Atticus in step with macOS."
                   >
-                    <Icon size={15} aria-hidden className="shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+                    <ThemeControl value={theme} onChange={onThemeChange} busy={themePending} />
+                  </SettingsBlock>
 
-        <div className="min-w-0">
-          {section === "general" ? (
-            <div className="space-y-4">
-              <SettingsPageHeader
-                title="General"
-                description="Choose how Atticus looks and receives new versions."
-              />
-
-              <div className="border-border-subtle divide-y divide-(--color-border-subtle) border-y">
-                <SettingsCard
-                  icon={Palette}
-                  title="Appearance"
-                  description="Use a light or dark theme, or follow your system setting."
-                >
-                  <ThemeControl value={theme} onChange={onThemeChange} busy={themePending} />
-                </SettingsCard>
-
-                <SettingsCard
-                  icon={RefreshCw}
-                  title="Automatic updates"
-                  description="Atticus checks at launch and every 30 minutes, downloads signed updates in the background, and asks before restarting."
-                  badge={
-                    <span className="text-accent-fg inline-flex items-center gap-1 text-2xs font-medium">
-                      <CheckCircle2 size={11} aria-hidden />
-                      Main channel
-                    </span>
-                  }
-                />
-              </div>
-            </div>
-          ) : section === "ai" ? (
-            <div className="space-y-4">
-              <SettingsPageHeader
-                title="AI access"
-                description="Connect a local AI through MCP without giving it unrestricted control."
-              />
-              <McpPanel />
-            </div>
-          ) : section === "data" ? (
-            <div className="space-y-4">
-              <SettingsPageHeader
-                title="Data"
-                description="Back up, export, import, or restore your local workspace."
-              />
-
-              <div className="border-border-subtle border-y">
-                <SettingsCard
-                  icon={DatabaseBackup}
-                  title="Create a backup"
-                  description="Write a timestamped copy beside the database. Manual backups are never pruned."
-                  badge={
+                  <SettingsBlock
+                    marker="02"
+                    title="Automatic updates"
+                    description="Atticus checks at launch and every 30 minutes, downloads signed updates quietly, and asks before restarting."
+                    status={<SettingsStatus>Main channel</SettingsStatus>}
+                  />
+                </div>
+              ) : section === "ai" ? (
+                <McpPanel />
+              ) : section === "data" ? (
+                <div className="border-border-default mt-7 border-t">
+                  <SettingsBlock
+                    marker="01"
+                    title="Create a backup"
+                    description="Write a timestamped database copy beside the workspace. Manual backups are never pruned."
+                    status={<SettingsStatus>Local snapshot</SettingsStatus>}
+                  >
                     <Button
                       size="sm"
                       onClick={() => {
@@ -176,77 +238,64 @@ export function SettingsDialog({
                       }}
                       disabled={backup.isPending}
                     >
+                      <DatabaseBackup size={13} aria-hidden />
                       {backup.isPending ? "Backing up…" : "Back up now"}
                     </Button>
-                  }
-                />
-              </div>
+                  </SettingsBlock>
 
-              <DataPanel projects={projects} onDataReplaced={onDataReplaced} />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <SettingsPageHeader
-                title="About"
-                description="Version, platform, and local storage details for this installation."
-              />
-
-              {appInfo.data !== undefined && databaseInfo.data !== undefined ? (
-                <DiagnosticsPanel app={appInfo.data} database={databaseInfo.data} />
-              ) : databaseInfo.isError || appInfo.isError ? (
-                <p role="alert" className="text-danger-fg text-xs">
-                  Couldn&rsquo;t read the application details.
-                </p>
+                  <DataPanel projects={projects} onDataReplaced={onDataReplaced} />
+                </div>
               ) : (
-                <p role="status" className="text-fg-secondary text-xs">
-                  Reading application details…
-                </p>
+                <div className="border-border-default mt-7 border-t">
+                  {appInfo.data !== undefined && databaseInfo.data !== undefined ? (
+                    <DiagnosticsPanel app={appInfo.data} database={databaseInfo.data} />
+                  ) : databaseInfo.isError || appInfo.isError ? (
+                    <p
+                      role="alert"
+                      className="border-border-subtle text-danger-fg border-b py-6 text-xs"
+                    >
+                      Couldn&rsquo;t read the application details.
+                    </p>
+                  ) : (
+                    <p
+                      role="status"
+                      className="border-border-subtle text-fg-secondary border-b py-6 text-xs"
+                    >
+                      Reading application details…
+                    </p>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
+          </BlurFade>
+        </main>
       </div>
-    </Dialog>
+    </DialogPage>
   );
 }
 
-function SettingsPageHeader({ title, description }: { title: string; description: string }) {
-  return (
-    <header className="pb-1">
-      <h2 className="text-fg-primary text-lg font-semibold">{title}</h2>
-      <p className="text-fg-secondary mt-1 text-xs">{description}</p>
-    </header>
-  );
-}
-
-function SettingsCard({
-  icon: Icon,
+function SettingsPageHeader({
+  marker,
   title,
+  eyebrow,
   description,
-  badge,
-  children,
 }: {
-  icon: LucideIcon;
+  marker: string;
   title: string;
+  eyebrow: string;
   description: string;
-  badge?: ReactNode;
-  children?: ReactNode;
 }) {
   return (
-    <section className="py-4">
-      <div className="flex items-start gap-3">
-        <span className="text-accent-fg flex size-6 shrink-0 items-center justify-center">
-          <Icon size={15} aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-fg-primary text-sm font-semibold">{title}</h3>
-            {badge}
-          </div>
-          <p className="text-fg-secondary mt-1 max-w-xl text-xs">{description}</p>
-          {children === undefined ? null : <div className="mt-4">{children}</div>}
-        </div>
+    <header className="border-border-default flex flex-wrap items-end justify-between gap-5 border-b pb-6">
+      <div>
+        <p className="text-accent-fg font-mono text-2xs font-semibold tracking-[0.14em] uppercase">
+          {marker} / {eyebrow}
+        </p>
+        <h2 className="text-fg-primary mt-2 text-xl font-semibold tracking-[-0.025em]">{title}</h2>
       </div>
-    </section>
+      <p className="text-fg-secondary max-w-md text-sm leading-relaxed lg:text-right">
+        {description}
+      </p>
+    </header>
   );
 }

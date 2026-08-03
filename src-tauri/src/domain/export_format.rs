@@ -16,7 +16,7 @@ use ts_rs::TS;
 use crate::error::{AppError, AppResult};
 
 /// The shape this build writes, and the highest it can read.
-pub const CURRENT_EXPORT_VERSION: u32 = 3;
+pub const CURRENT_EXPORT_VERSION: u32 = 4;
 
 /// The application name written into the envelope, so a file that is obviously
 /// from somewhere else can be rejected by looking rather than by parsing.
@@ -61,6 +61,8 @@ pub struct ExportData {
     pub saved_filters: Vec<ExportSavedFilter>,
     #[serde(default)]
     pub notes: Vec<ExportNote>,
+    #[serde(default)]
+    pub note_task_links: Vec<ExportNoteTaskLink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -247,6 +249,18 @@ pub struct ExportNote {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "ExportNoteTaskLink.ts")]
+pub struct ExportNoteTaskLink {
+    pub note_id: String,
+    pub task_id: String,
+    #[ts(type = "number")]
+    pub position: i64,
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
 /// Brings any readable document up to `CURRENT_EXPORT_VERSION`.
 ///
 /// Refuses a newer version by number rather than trying to read it: a document
@@ -275,13 +289,12 @@ pub fn upgrade(document: serde_json::Value) -> AppResult<ExportDocument> {
     }
 
     // The upgrade chain. Each arm takes the document one version forward and is
-    // a pure function of the value, so a fixture can pin it forever. There is
-    // only one released shape so far; the `match` is the shape the second one
-    // slots into rather than a rewrite.
+    // a pure function of the value, so a fixture can pin it forever.
     let current = match version {
-        1 => v2_to_v3(v1_to_v2(document)),
-        2 => v2_to_v3(document),
-        3 => document,
+        1 => v3_to_v4(v2_to_v3(v1_to_v2(document))),
+        2 => v3_to_v4(v2_to_v3(document)),
+        3 => v3_to_v4(document),
+        4 => document,
         other => {
             return Err(AppError::validation(
                 "exportVersion",
@@ -325,6 +338,19 @@ fn v2_to_v3(mut document: serde_json::Value) -> serde_json::Value {
         data.entry("linkRefs")
             .or_insert_with(|| serde_json::Value::Array(Vec::new()));
     }
+    document["exportVersion"] = serde_json::json!(3);
+    document
+}
+
+/// v3 → v4: notes could not yet reference the tasks they help plan.
+fn v3_to_v4(mut document: serde_json::Value) -> serde_json::Value {
+    if let Some(data) = document
+        .get_mut("data")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        data.entry("noteTaskLinks")
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+    }
     document["exportVersion"] = serde_json::json!(CURRENT_EXPORT_VERSION);
     document
 }
@@ -349,6 +375,14 @@ mod tests {
 
         assert_eq!(document.export_version, CURRENT_EXPORT_VERSION);
         assert!(document.data.projects.is_empty());
+    }
+
+    #[test]
+    fn version_3_reads_with_no_note_task_links() {
+        let document = upgrade(envelope(3)).expect("version 3 upgrades");
+
+        assert_eq!(document.export_version, CURRENT_EXPORT_VERSION);
+        assert!(document.data.note_task_links.is_empty());
     }
 
     #[test]
@@ -410,6 +444,12 @@ mod tests {
                     created_at: 1,
                     updated_at: 2,
                 }],
+                note_task_links: vec![ExportNoteTaskLink {
+                    note_id: "n1".into(),
+                    task_id: "t1".into(),
+                    position: 0,
+                    created_at: 3,
+                }],
                 ..ExportData::default()
             },
         };
@@ -420,5 +460,7 @@ mod tests {
         assert_eq!(read_back.data.projects.len(), 1);
         assert_eq!(read_back.data.projects[0].key_prefix, "ATT");
         assert_eq!(read_back.data.projects[0].next_task_number, 4);
+        assert_eq!(read_back.data.note_task_links[0].note_id, "n1");
+        assert_eq!(read_back.data.note_task_links[0].task_id, "t1");
     }
 }

@@ -1,6 +1,6 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TaskDetail } from "@/lib/bindings/TaskDetail";
 import { ipc } from "@/lib/ipc";
@@ -8,6 +8,7 @@ import { renderWithProviders } from "@/test/render";
 
 import { todayIso } from "./dates";
 import { TaskEditor } from "./TaskEditor";
+import { IDLE_PREVIEW_DELAY_MS } from "@/components/ui/useIdlePreview";
 
 vi.mock("@/lib/ipc", () => ({
   ipc: {
@@ -75,6 +76,10 @@ beforeEach(() => {
   taskUpdate.mockImplementation((_id, _patch) => Promise.resolve(detail().task));
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 const COLUMNS = [
   {
     id: "c1",
@@ -111,6 +116,22 @@ function render(onOpenChange = vi.fn()) {
 }
 
 describe("TaskEditor", () => {
+  it("uses the full-page work surface without explaining the writing format", async () => {
+    render();
+
+    await screen.findByLabelText("Edit description");
+    expect(document.querySelector("[data-task-editor-main]")).not.toBeNull();
+    expect(document.querySelector("[data-task-editor-rail]")).not.toBeNull();
+    expect(screen.queryByText(/Markdown \/ auto preview/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Edit description")).toHaveAttribute(
+      "placeholder",
+      "Add context, decisions, or acceptance criteria…",
+    );
+    expect(screen.queryByText(/Atticus \/ working copy/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Atticus")).toBeInTheDocument();
+    expect(screen.getByText("Careful work starts with a clear view.")).toBeInTheDocument();
+  });
+
   it("shows the task's stable short ID and can copy it", async () => {
     // `userEvent.setup()` installs its own clipboard stub, so the assertion
     // reads what actually landed there rather than spying on a replaced method.
@@ -186,12 +207,36 @@ describe("TaskEditor", () => {
     expect(await screen.findByRole("heading", { name: "A heading" })).toBeInTheDocument();
   });
 
-  it("offers every priority level with a name", async () => {
+  it("returns to rendered markdown after typing stops", async () => {
     render();
+    const description = await screen.findByLabelText("Edit description");
+
+    vi.useFakeTimers();
+    fireEvent.change(description, { target: { value: "# Automatically rendered" } });
+
+    act(() => {
+      vi.advanceTimersByTime(IDLE_PREVIEW_DELAY_MS - 1);
+    });
+    expect(
+      screen.queryByRole("heading", { name: "Automatically rendered" }),
+    ).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    vi.useRealTimers();
+
+    expect(screen.getByRole("heading", { name: "Automatically rendered" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Edit description")).not.toBeInTheDocument();
+  });
+
+  it("offers every priority level with a name", async () => {
+    const { user } = render();
     const field = await screen.findByLabelText("Priority");
+    await user.click(field);
 
     for (const level of ["None", "Low", "Medium", "High", "Urgent"]) {
-      expect(within(field).getByRole("option", { name: level })).toBeInTheDocument();
+      expect(screen.getByRole("menuitemradio", { name: level })).toBeInTheDocument();
     }
   });
 
@@ -201,7 +246,8 @@ describe("TaskEditor", () => {
     const { user } = render();
     const field = await screen.findByLabelText("Status");
 
-    await user.selectOptions(field, "c2");
+    await user.click(field);
+    await user.click(screen.getByRole("menuitemradio", { name: "Done" }));
     await user.click(screen.getByRole("button", { name: /Save changes/ }));
 
     await waitFor(() => {
@@ -215,11 +261,27 @@ describe("TaskEditor", () => {
     const { user } = render();
     const field = await screen.findByLabelText("Due date");
 
-    await user.clear(field);
+    await user.click(field);
+    await user.click(screen.getByRole("button", { name: "Clear due date" }));
     await user.click(screen.getByRole("button", { name: /Save changes/ }));
 
     await waitFor(() => {
       expect(taskUpdate).toHaveBeenCalledWith("t1", { clearDueDate: true });
+    });
+  });
+
+  it("chooses a due date from the Atticus calendar", async () => {
+    taskDetail.mockResolvedValue(detail({ task: { ...detail().task, dueDate: "2026-08-01" } }));
+    const { user } = render();
+    await user.click(await screen.findByLabelText("Due date"));
+
+    const day = document.querySelector<HTMLButtonElement>('[data-date="2026-08-14"]');
+    if (day === null) throw new Error("The expected calendar day was not rendered.");
+    await user.click(day);
+    await user.click(screen.getByRole("button", { name: /Save changes/ }));
+
+    await waitFor(() => {
+      expect(taskUpdate).toHaveBeenCalledWith("t1", { dueDate: "2026-08-14" });
     });
   });
 
@@ -305,7 +367,7 @@ describe("TaskEditor", () => {
 
     render();
 
-    expect((await screen.findByText("Blocked")).getAttribute("style")).toContain(
+    expect((await screen.findByText("Blocked")).parentElement?.getAttribute("style")).toContain(
       "background-color: var(--label-red)",
     );
   });

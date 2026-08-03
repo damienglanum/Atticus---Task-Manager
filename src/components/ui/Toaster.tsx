@@ -25,7 +25,7 @@ export function Toaster() {
         <div
           key={toast.id}
           className={cn(
-            "pointer-events-auto flex items-start gap-2 rounded-md border p-3 text-xs shadow-(--shadow-overlay)",
+            "dui-alert pointer-events-auto flex items-start gap-2 rounded-xl border p-3 text-xs shadow-(--shadow-overlay)",
             toast.tone === "error"
               ? "border-danger-border bg-danger-bg text-danger-fg"
               : "border-border-default bg-surface-raised text-fg-primary",

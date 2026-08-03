@@ -9,7 +9,7 @@ import {
 import { cn } from "@/lib/cn";
 
 const CONTROL = cn(
-  "bg-surface-card border-border-strong text-fg-primary w-full rounded-md border px-2 py-1.5",
+  "bg-surface-card border-border-strong text-fg-primary w-full rounded-lg border px-3 py-2",
   "text-base placeholder:text-fg-secondary",
   "aria-invalid:border-danger-border",
 );
@@ -74,7 +74,7 @@ export function TextField({ label, error, hint, className, ...rest }: TextFieldP
           id={id}
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
-          className={cn(CONTROL, className)}
+          className={cn("dui-input", CONTROL, className)}
           {...rest}
         />
       )}
@@ -96,7 +96,7 @@ export function TextAreaField({ label, error, hint, className, ...rest }: TextAr
           id={id}
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
-          className={cn(CONTROL, "resize-y", className)}
+          className={cn("dui-textarea", CONTROL, "resize-y", className)}
           {...rest}
         />
       )}

@@ -1,5 +1,6 @@
 //! Task persistence.
 
+use rmcp::schemars::JsonSchema;
 use rusqlite::{Connection, OptionalExtension, Row, Transaction};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -9,7 +10,7 @@ use crate::db::{now_ms, ordering};
 use crate::domain::validate;
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "Task.ts")]
 pub struct Task {
@@ -183,7 +184,37 @@ pub fn create_with_details(
 }
 
 pub fn update(conn: &Connection, id: &str, patch: TaskPatch) -> AppResult<Task> {
+    update_with_expected_timestamp(conn, id, patch, None)
+}
+
+/// Updates a task only when the caller's last-read timestamp is still current.
+///
+/// MCP uses this compare-and-set variant for replacement-capable edits so a
+/// desktop edit made between `get_task` and `update_task` is never overwritten.
+pub fn update_if_current(
+    conn: &Connection,
+    id: &str,
+    patch: TaskPatch,
+    expected_updated_at: i64,
+) -> AppResult<Task> {
+    update_with_expected_timestamp(conn, id, patch, Some(expected_updated_at))
+}
+
+fn update_with_expected_timestamp(
+    conn: &Connection,
+    id: &str,
+    patch: TaskPatch,
+    expected_updated_at: Option<i64>,
+) -> AppResult<Task> {
     let existing = find(conn, id)?;
+
+    if expected_updated_at.is_some_and(|expected| expected != existing.updated_at) {
+        return Err(stale_task_error(
+            id,
+            expected_updated_at.unwrap(),
+            existing.updated_at,
+        ));
+    }
 
     let title = match patch.title {
         Some(value) => validate::required_text("title", &value, validate::TASK_TITLE_MAX)?,
@@ -220,21 +251,56 @@ pub fn update(conn: &Connection, id: &str, patch: TaskPatch) -> AppResult<Task> 
         }
     };
 
-    conn.execute(
-        "UPDATE tasks SET title = ?2, description = ?3, priority = ?4, due_date = ?5, \
-         estimate_minutes = ?6, updated_at = ?7 WHERE id = ?1",
-        rusqlite::params![
+    let updated_at = now_ms().max(existing.updated_at.saturating_add(1));
+    let changed = if let Some(expected) = expected_updated_at {
+        conn.execute(
+            "UPDATE tasks SET title = ?2, description = ?3, priority = ?4, due_date = ?5, \
+             estimate_minutes = ?6, updated_at = ?7 WHERE id = ?1 AND updated_at = ?8",
+            rusqlite::params![
+                id,
+                title,
+                description,
+                priority,
+                due_date,
+                estimate_minutes,
+                updated_at,
+                expected
+            ],
+        )?
+    } else {
+        conn.execute(
+            "UPDATE tasks SET title = ?2, description = ?3, priority = ?4, due_date = ?5, \
+             estimate_minutes = ?6, updated_at = ?7 WHERE id = ?1",
+            rusqlite::params![
+                id,
+                title,
+                description,
+                priority,
+                due_date,
+                estimate_minutes,
+                updated_at
+            ],
+        )?
+    };
+
+    if changed == 0 {
+        let current = find(conn, id)?;
+        return Err(stale_task_error(
             id,
-            title,
-            description,
-            priority,
-            due_date,
-            estimate_minutes,
-            now_ms()
-        ],
-    )?;
+            expected_updated_at.unwrap_or(existing.updated_at),
+            current.updated_at,
+        ));
+    }
 
     find(conn, id)
+}
+
+fn stale_task_error(id: &str, expected_updated_at: i64, current_updated_at: i64) -> AppError {
+    AppError::Conflict {
+        message: format!(
+            "Task {id} changed after it was read (expected updatedAt {expected_updated_at}, current {current_updated_at}). Call atticus_get_task, merge with current state, and retry using the new updatedAt."
+        ),
+    }
 }
 
 /// Copies a task and places the copy directly below the original (US-11 AC3).
@@ -409,7 +475,7 @@ pub fn set_archived(conn: &mut Connection, id: &str, archived: bool) -> AppResul
 /// Both columns are returned rather than just the destination: the source has
 /// closed up behind the task, and a frontend that only heard about the
 /// destination would keep showing a gap until the next full load.
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "MoveResult.ts")]
 pub struct MoveResult {
@@ -419,7 +485,7 @@ pub struct MoveResult {
     pub columns: Vec<ColumnOrder>,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "ColumnOrder.ts")]
 pub struct ColumnOrder {
@@ -571,6 +637,8 @@ pub struct TaskSnapshot {
     pub label_ids: Vec<String>,
     pub file_refs: Vec<FileRefRow>,
     pub link_refs: Vec<LinkRefRow>,
+    #[ts(inline)]
+    pub note_task_links: Vec<NoteTaskLinkRow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -613,6 +681,18 @@ pub struct FileRefRow {
 pub struct LinkRefRow {
     pub id: String,
     pub url: String,
+    #[ts(type = "number")]
+    pub position: i64,
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
+/// The note-owned association row a task deletion would cascade away. The note
+/// itself is not part of the task snapshot and remains stored independently.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteTaskLinkRow {
+    pub note_id: String,
     #[ts(type = "number")]
     pub position: i64,
     #[ts(type = "number")]
@@ -676,12 +756,27 @@ fn snapshot_one(conn: &Connection, task: &Task) -> AppResult<TaskSnapshot> {
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
+    let mut note_links = conn.prepare(
+        "SELECT note_id, position, created_at \
+         FROM note_task_links WHERE task_id = ?1 ORDER BY note_id, position",
+    )?;
+    let note_task_links = note_links
+        .query_map([&task.id], |row| {
+            Ok(NoteTaskLinkRow {
+                note_id: row.get("note_id")?,
+                position: row.get("position")?,
+                created_at: row.get("created_at")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
     Ok(TaskSnapshot {
         task: task.clone(),
         subtasks: load_subtasks(conn, &task.id)?,
         label_ids,
         file_refs,
         link_refs,
+        note_task_links,
     })
 }
 
@@ -790,6 +885,26 @@ fn reinsert_at(tx: &Transaction<'_>, snapshot: &TaskSnapshot, position: i64) -> 
                 link_ref.url,
                 link_ref.position,
                 link_ref.created_at
+            ],
+        )?;
+    }
+
+    for note_link in &snapshot.note_task_links {
+        // The note is independently owned and may have been deleted between
+        // task deletion and undo. Its absence should not block restoring the
+        // task; when it still exists, restore the exact ordered association.
+        tx.execute(
+            "INSERT INTO note_task_links (note_id, task_id, position, created_at) \
+             SELECT ?1, ?2, ?3, ?4 \
+             WHERE EXISTS ( \
+               SELECT 1 FROM notes WHERE id = ?1 AND project_id = ?5 \
+             )",
+            rusqlite::params![
+                note_link.note_id,
+                task.id,
+                note_link.position,
+                note_link.created_at,
+                task.project_id,
             ],
         )?;
     }

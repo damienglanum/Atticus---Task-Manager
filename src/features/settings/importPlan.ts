@@ -19,6 +19,7 @@ export function describePlan(plan: ImportPlan): string {
     [plan.fileRefs, "file reference"],
     [plan.linkRefs, "web link"],
     [plan.savedFilters, "saved filter"],
+    [plan.noteTaskLinks, "note/task link"],
   ];
 
   const counted = parts

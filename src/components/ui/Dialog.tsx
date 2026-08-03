@@ -93,10 +93,14 @@ interface DialogPageProps {
   /** Sits above the title, in small caps: where in the app this page is. */
   breadcrumb?: ReactNode;
   title: string;
+  /** A screen-reader description of the page-level dialog. */
+  description?: string;
   /** Names the back control, so it says what it goes back *to*. */
   backLabel: string;
   /** Trailing controls in the header bar. */
   actions?: ReactNode | undefined;
+  /** Lets full-page workspaces own their scrolling while settings keep page scrolling. */
+  bodyClassName?: string | undefined;
   children: ReactNode;
 }
 
@@ -121,8 +125,10 @@ export function DialogPage({
   onOpenChange,
   breadcrumb,
   title,
+  description,
   backLabel,
   actions,
+  bodyClassName,
   children,
 }: DialogPageProps) {
   return (
@@ -136,11 +142,16 @@ export function DialogPage({
           style={{ zIndex: "var(--z-dialog)" }}
           className="bg-surface-app fixed inset-0 flex flex-col"
         >
-          <header className="border-border-subtle flex shrink-0 items-center gap-4 border-b px-5 py-3">
+          {description === undefined ? null : (
+            <DialogPrimitive.Description className="sr-only">
+              {description}
+            </DialogPrimitive.Description>
+          )}
+          <header className="border-border-subtle bg-surface-app flex h-16 shrink-0 items-center gap-4 border-b px-6">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="order-2 min-w-0">
                 {breadcrumb}
-                <DialogPrimitive.Title className="truncate text-xl font-semibold">
+                <DialogPrimitive.Title className="truncate text-base font-semibold">
                   {title}
                 </DialogPrimitive.Title>
               </div>
@@ -157,7 +168,7 @@ export function DialogPage({
             )}
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <div className={cn("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

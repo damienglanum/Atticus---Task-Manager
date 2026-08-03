@@ -17,7 +17,7 @@ export function LabelChip({ label, className }: { label: Label; className?: stri
   return (
     <span
       className={cn(
-        "text-fg-secondary inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 py-0.5",
+        "dui-badge dui-badge-sm text-fg-secondary inline-flex max-w-full items-center gap-1.5 rounded-md border px-1.5 py-0.5",
         "text-2xs font-medium tracking-[0.06em] uppercase",
         className,
       )}

@@ -10,7 +10,7 @@
 //! person repairing a hand-edited export should see the whole list once instead
 //! of discovering the next problem on each attempt.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 use ts_rs::TS;
@@ -45,6 +45,8 @@ pub struct ImportPlan {
     pub saved_filters: usize,
     #[ts(type = "number")]
     pub notes: usize,
+    #[ts(type = "number")]
+    pub note_task_links: usize,
 }
 
 /// Checks the document and returns what it would create.
@@ -80,6 +82,7 @@ fn plan(document: &ExportDocument) -> ImportPlan {
         link_refs: data.link_refs.len(),
         saved_filters: data.saved_filters.len(),
         notes: data.notes.len(),
+        note_task_links: data.note_task_links.len(),
     }
 }
 
@@ -267,8 +270,9 @@ fn check_tasks(document: &ExportDocument, issues: &mut Vec<ImportIssue>) {
     }
 }
 
-/// Subtasks, labels, task-label links, file references, web links and saved
-/// filters — all of which hang off a task, a project, or both.
+/// Subtasks, labels, task-label links, file references, web links, notes,
+/// note/task links and saved filters — all of which hang off a task, a project,
+/// or both.
 fn check_children(document: &ExportDocument, issues: &mut Vec<ImportIssue>) {
     let data = &document.data;
     let projects: HashSet<&str> = data.projects.iter().map(|p| p.id.as_str()).collect();
@@ -381,6 +385,71 @@ fn check_children(document: &ExportDocument, issues: &mut Vec<ImportIssue>) {
         }
     }
 
+    let notes_by_project: HashMap<&str, &str> = data
+        .notes
+        .iter()
+        .map(|note| (note.id.as_str(), note.project_id.as_str()))
+        .collect();
+    let tasks_by_project: HashMap<&str, &str> = data
+        .tasks
+        .iter()
+        .map(|task| (task.id.as_str(), task.project_id.as_str()))
+        .collect();
+    let mut note_task_pairs = HashSet::new();
+    let mut note_task_positions = HashSet::new();
+
+    for (index, link) in data.note_task_links.iter().enumerate() {
+        let note_project = notes_by_project.get(link.note_id.as_str());
+        let task_project = tasks_by_project.get(link.task_id.as_str());
+
+        if note_project.is_none() {
+            issues.push(ImportIssue::new(
+                format!("data.noteTaskLinks[{index}].noteId"),
+                format!("No note with id {} is in this file.", link.note_id),
+            ));
+        }
+        if task_project.is_none() {
+            issues.push(ImportIssue::new(
+                format!("data.noteTaskLinks[{index}].taskId"),
+                format!("No task with id {} is in this file.", link.task_id),
+            ));
+        }
+        if note_project
+            .zip(task_project)
+            .is_some_and(|(note_project, task_project)| note_project != task_project)
+        {
+            issues.push(ImportIssue::new(
+                format!("data.noteTaskLinks[{index}].taskId"),
+                "A note can only link to a task in the same project.",
+            ));
+        }
+        if link.position < 0 {
+            issues.push(ImportIssue::new(
+                format!("data.noteTaskLinks[{index}].position"),
+                "A note/task link position must not be negative.",
+            ));
+        }
+
+        let pair_is_new = note_task_pairs.insert((link.note_id.as_str(), link.task_id.as_str()));
+        if !pair_is_new {
+            issues.push(ImportIssue::new(
+                format!("data.noteTaskLinks[{index}]"),
+                format!(
+                    "Duplicate note/task link: note {} already links to task {}.",
+                    link.note_id, link.task_id
+                ),
+            ));
+        } else if !note_task_positions.insert((link.note_id.as_str(), link.position)) {
+            issues.push(ImportIssue::new(
+                format!("data.noteTaskLinks[{index}].position"),
+                format!(
+                    "Duplicate position {} for links from note {}.",
+                    link.position, link.note_id
+                ),
+            ));
+        }
+    }
+
     unique_ids(
         data.saved_filters.iter().map(|f| f.id.as_str()),
         "savedFilters",
@@ -444,8 +513,8 @@ fn days_in_month(year: i64, month: u32) -> u32 {
 mod tests {
     use super::*;
     use crate::domain::export_format::{
-        ExportBoard, ExportColumn, ExportData, ExportProject, ExportTask, CURRENT_EXPORT_VERSION,
-        EXPORT_APP,
+        ExportBoard, ExportColumn, ExportData, ExportNote, ExportNoteTaskLink, ExportProject,
+        ExportTask, CURRENT_EXPORT_VERSION, EXPORT_APP,
     };
 
     fn document(data: ExportData) -> ExportDocument {
@@ -516,6 +585,27 @@ mod tests {
         }
     }
 
+    fn note(id: &str, project_id: &str) -> ExportNote {
+        ExportNote {
+            id: id.into(),
+            project_id: project_id.into(),
+            title: "A note".into(),
+            body: String::new(),
+            position: 0,
+            created_at: 1,
+            updated_at: 1,
+        }
+    }
+
+    fn note_task_link(note_id: &str, task_id: &str) -> ExportNoteTaskLink {
+        ExportNoteTaskLink {
+            note_id: note_id.into(),
+            task_id: task_id.into(),
+            position: 0,
+            created_at: 1,
+        }
+    }
+
     /// A minimal document that is entirely valid, so every test below changes
     /// exactly one thing and the failure it produces is attributable.
     fn sound() -> ExportData {
@@ -538,7 +628,10 @@ mod tests {
 
     #[test]
     fn a_sound_document_yields_a_plan_with_the_counts() {
-        let plan = validate_document(&document(sound())).expect("valid");
+        let mut data = sound();
+        data.notes.push(note("n1", "p1"));
+        data.note_task_links.push(note_task_link("n1", "t1"));
+        let plan = validate_document(&document(data)).expect("valid");
 
         assert_eq!(
             plan,
@@ -547,6 +640,8 @@ mod tests {
                 boards: 1,
                 columns: 1,
                 tasks: 1,
+                notes: 1,
+                note_task_links: 1,
                 ..ImportPlan::default()
             }
         );
@@ -601,6 +696,79 @@ mod tests {
 
         assert_eq!(found[0].path, "data.tasks[1].id");
         assert!(found[0].message.contains("Duplicate"));
+    }
+
+    #[test]
+    fn a_note_task_link_requires_both_records_to_exist() {
+        let mut data = sound();
+        data.note_task_links
+            .push(note_task_link("missing-note", "missing-task"));
+
+        let found = issues(data);
+        let paths: Vec<&str> = found.iter().map(|issue| issue.path.as_str()).collect();
+
+        assert_eq!(found.len(), 2);
+        assert!(paths.contains(&"data.noteTaskLinks[0].noteId"), "{paths:?}");
+        assert!(paths.contains(&"data.noteTaskLinks[0].taskId"), "{paths:?}");
+    }
+
+    #[test]
+    fn a_note_cannot_link_to_a_task_in_another_project() {
+        let mut data = sound();
+        data.projects.push(project("p2"));
+        data.notes.push(note("n1", "p2"));
+        data.note_task_links.push(note_task_link("n1", "t1"));
+
+        let found = issues(data);
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "data.noteTaskLinks[0].taskId");
+        assert!(found[0].message.contains("same project"));
+    }
+
+    #[test]
+    fn a_note_task_link_cannot_be_repeated() {
+        let mut data = sound();
+        data.notes.push(note("n1", "p1"));
+        data.note_task_links.push(note_task_link("n1", "t1"));
+        data.note_task_links.push(note_task_link("n1", "t1"));
+
+        let found = issues(data);
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "data.noteTaskLinks[1]");
+        assert!(found[0].message.contains("Duplicate"));
+    }
+
+    #[test]
+    fn note_task_link_positions_are_non_negative_and_unique_per_note() {
+        let mut data = sound();
+        let mut second_task = task("t2");
+        second_task.number = 2;
+        data.tasks.push(second_task);
+        let mut third_task = task("t3");
+        third_task.number = 3;
+        data.tasks.push(third_task);
+        data.notes.push(note("n1", "p1"));
+
+        let mut negative = note_task_link("n1", "t1");
+        negative.position = -1;
+        data.note_task_links.push(negative);
+        data.note_task_links.push(note_task_link("n1", "t2"));
+        data.note_task_links.push(note_task_link("n1", "t3"));
+
+        let found = issues(data);
+        let paths: Vec<&str> = found.iter().map(|issue| issue.path.as_str()).collect();
+
+        assert_eq!(found.len(), 2, "{found:?}");
+        assert!(
+            paths.contains(&"data.noteTaskLinks[0].position"),
+            "{paths:?}"
+        );
+        assert!(
+            paths.contains(&"data.noteTaskLinks[2].position"),
+            "{paths:?}"
+        );
     }
 
     #[test]

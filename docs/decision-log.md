@@ -47,6 +47,36 @@ suffix (`-1`) sits after the timestamp.
 
 ## M8 — Theme, accessibility, responsive, visual polish
 
+**2026-08-03 · Focus mode owns the page edges.**
+`DialogPage` was already full-window, but its child was still centred inside a
+`max-w-7xl` canvas. That made it look like an enlarged modal and left the right
+rail floating inboard from the application edge. The editor body now divides
+the whole page between a fluid work area and a 22rem metadata rail. At wide
+sizes the work area divides again into a primary description and a supporting
+checklist/reference column; smaller windows retain one normal reading order.
+
+**2026-08-03 · Markdown is behaviour, not onboarding copy.**
+The formatting toolbar and rendered-after-pause behaviour explain the writing
+surface by doing. Repeating “Markdown”, “auto preview”, and “formatted when you
+pause” inside both descriptions and Notes turned a quiet editor into product
+documentation. Those hints are gone; neutral prompts remain, while the storage
+format, rendering, accessibility labels, and MCP contract are unchanged.
+
+**2026-08-03 · Add column is an action, not a lane.**
+The trailing 13rem affordance made the board wider even though it contained no
+work, which forced a scrollbar and made the last stretch read as empty space.
+It now sits in the compact board toolbar beside New task. The five actual lanes
+can therefore divide a wide workspace between them, while each retains a
+260px minimum and 384px maximum.
+
+**2026-08-03 · The board header names context once.**
+The shell breadcrumb already says which project is open, so the large
+`ACTIVE PROJECT` banner repeated context while separating the board tabs from
+the title. The board toolbar now keeps the project name, compact work counts,
+board switcher, and create actions on one 64px line; filters form its second
+rule. New board remains outside the tablist so the composite still has one Tab
+stop.
+
 **2026-07-30 · The board tablist had three tab stops, and the fix moved a feature.**
 `role="tablist"` wrapped the tabs, a per-board actions menu revealed on hover, and "New board". A
 tablist owns tabs and nothing else, so `Tab` landed inside it repeatedly instead of moving past it.

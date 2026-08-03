@@ -51,6 +51,9 @@ export interface MarkGeometry {
   viewBox: string;
   /** In viewBox units, so the on-screen weight is the same at every size. */
   strokeWidth: number;
+  /** Small optical correction, expressed in viewBox units. */
+  offsetX: number;
+  offsetY: number;
 }
 
 /**
@@ -63,7 +66,8 @@ export interface MarkGeometry {
  * The ordinary responsive-logo problem, solved the ordinary way.
  */
 export function markGeometry(pixels: number): MarkGeometry {
-  const rings = pixels < 28 ? 3 : pixels < 56 ? 5 : CONTOURS.length;
+  const rings =
+    pixels < 25 ? 2 : pixels < 41 ? 3 : pixels < 64 ? 4 : pixels < 96 ? 5 : CONTOURS.length;
 
   const viewBox = VIEW_BOXES[rings - 1] ?? VIEW_BOXES[CONTOURS.length - 1] ?? "0 0 360 360";
   const side = Number(viewBox.split(" ")[2] ?? 360);
@@ -75,7 +79,14 @@ export function markGeometry(pixels: number): MarkGeometry {
   // paler than the reduced one sitting above it.
   const strokeWidth = (targetStroke(pixels) * side) / Math.max(pixels, 1);
 
-  return { rings, viewBox, strokeWidth };
+  // The compact contour silhouette carries slightly more visual mass below and
+  // to the right of its mathematical bounds. Correct the ink, not the SVG box:
+  // the box remains exactly square while the mark reads centred beside type.
+  const compact = pixels < 41;
+  const offsetX = compact ? (-0.25 * side) / Math.max(pixels, 1) : 0;
+  const offsetY = compact ? (-0.8 * side) / Math.max(pixels, 1) : 0;
+
+  return { rings, viewBox, strokeWidth, offsetX, offsetY };
 }
 
 /**
@@ -85,8 +96,9 @@ export function markGeometry(pixels: number): MarkGeometry {
  * a large one can afford the artwork's original delicacy.
  */
 function targetStroke(pixels: number): number {
-  if (pixels < 28) return 1.3;
-  if (pixels < 56) return 1.5;
-  if (pixels < 160) return 1.6;
-  return 2.2;
+  if (pixels < 41) return 1.15;
+  if (pixels < 64) return 1.25;
+  if (pixels < 96) return 1.35;
+  if (pixels < 160) return 1.5;
+  return 2;
 }

@@ -6,10 +6,12 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-accent-solid text-white border-transparent hover:opacity-90",
-  secondary: "bg-surface-card text-fg-primary border-border-strong hover:bg-surface-sunken",
-  ghost: "bg-transparent text-fg-secondary border-transparent hover:bg-surface-sunken",
-  danger: "bg-danger-solid text-white border-transparent hover:opacity-90",
+  primary: "dui-btn-primary bg-accent-solid text-white border-transparent hover:brightness-110",
+  secondary:
+    "dui-btn-outline bg-transparent text-fg-primary border-border-default hover:bg-surface-sunken hover:border-border-strong",
+  ghost:
+    "dui-btn-ghost bg-transparent text-fg-secondary border-transparent hover:bg-surface-sunken",
+  danger: "dui-btn-error bg-danger-solid text-white border-transparent hover:opacity-90",
 };
 
 const SIZES: Record<Size, string> = {
@@ -35,19 +37,21 @@ export function Button({
   children,
   ...rest
 }: ButtonProps) {
+  const classes = cn(
+    "dui-btn inline-flex cursor-default items-center justify-center rounded-md border font-medium",
+    "transform-none transition-none",
+    "disabled:pointer-events-none disabled:opacity-50",
+    VARIANTS[variant],
+    SIZES[size],
+    className,
+  );
+
   return (
     <button
       // Explicit: a bare <button> inside a form submits it, which has caused
       // more accidental submissions than it has ever saved keystrokes.
       type={type}
-      className={cn(
-        "inline-flex cursor-default items-center justify-center rounded-lg border font-medium",
-        "transition-colors duration-(--duration-fast)",
-        "disabled:pointer-events-none disabled:opacity-50",
-        VARIANTS[variant],
-        SIZES[size],
-        className,
-      )}
+      className={classes}
       {...rest}
     >
       {children}
@@ -75,9 +79,9 @@ export function IconButton({ label, className, children, ref, ...rest }: IconBut
       aria-label={label}
       title={label}
       className={cn(
-        "text-fg-secondary hover:text-fg-primary hover:bg-surface-sunken",
-        "inline-flex size-7 cursor-default items-center justify-center rounded-md",
-        "transition-colors duration-(--duration-fast)",
+        "dui-btn dui-btn-ghost dui-btn-square dui-btn-sm text-fg-secondary hover:text-fg-primary hover:bg-surface-sunken",
+        "inline-flex size-7 min-h-0 cursor-default items-center justify-center rounded-md p-0",
+        "transform-none transition-none",
         "disabled:pointer-events-none disabled:opacity-50",
         className,
       )}

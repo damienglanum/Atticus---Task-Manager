@@ -1,5 +1,6 @@
 //! Board persistence.
 
+use rmcp::schemars::JsonSchema;
 use rusqlite::{Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -9,7 +10,7 @@ use crate::db::{now_ms, ordering};
 use crate::domain::validate;
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "Board.ts")]
 pub struct Board {

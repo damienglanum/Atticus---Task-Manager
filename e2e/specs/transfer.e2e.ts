@@ -95,7 +95,7 @@ describe("export and import", () => {
       data: { projects: { name: string }[]; tasks: { title: string }[] };
     };
 
-    expect(document.exportVersion).toBe(3);
+    expect(document.exportVersion).toBe(4);
     expect(document.app).toBe("atticus");
     expect(document.data.projects.map((project) => project.name)).toContain("Transferable");
     expect(document.data.tasks.map((task) => task.title)).toContain("Survives a round trip");

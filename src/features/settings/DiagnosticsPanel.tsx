@@ -1,6 +1,7 @@
 import type { AppInfo } from "@/lib/bindings/AppInfo";
 import type { DatabaseInfo } from "@/lib/bindings/DatabaseInfo";
 import { formatBytes } from "@/lib/format";
+import { SettingsBlock } from "./SettingsPrimitives";
 
 interface DiagnosticsPanelProps {
   app: AppInfo;
@@ -16,35 +17,40 @@ interface DiagnosticsPanelProps {
  */
 export function DiagnosticsPanel({ app, database }: DiagnosticsPanelProps) {
   return (
-    <section
-      aria-labelledby="diagnostics-heading"
-      className="border-border-subtle border-y px-1 py-4"
-    >
-      <h2 id="diagnostics-heading" className="text-fg-primary text-sm font-semibold">
-        Installation details
-      </h2>
-      <p className="text-fg-secondary mt-1 text-xs">
-        Useful when checking a version or locating a local backup.
-      </p>
+    <>
+      <SettingsBlock
+        marker="01"
+        title="Application"
+        description="The installed Atticus build and the platform it is running on."
+      >
+        <dl className="border-border-default divide-border-subtle divide-y border-y">
+          <Row label="Version" value={app.version} numeric />
+          <Row label="Platform" value={app.platform} />
+        </dl>
+      </SettingsBlock>
 
-      <dl className="border-border-subtle mt-4 divide-y divide-(--color-border-subtle) border-t">
-        <Row label="Version" value={app.version} numeric />
-        <Row label="Platform" value={app.platform} />
-        <Row label="Database" value={database.path ?? "In memory (no file)"} mono />
-        <Row
-          label="Size"
-          value={database.sizeBytes === null ? "—" : formatBytes(database.sizeBytes)}
-          numeric
-        />
-        <Row
-          label="Schema version"
-          value={`${String(database.schemaVersion)} of ${String(database.latestSchemaVersion)}`}
-          numeric
-        />
-        <Row label="Backups" value={database.backupDirectory ?? "—"} mono />
-        <Row label="Backups kept" value={String(database.backupCount)} numeric />
-      </dl>
-    </section>
+      <SettingsBlock
+        marker="02"
+        title="Local database"
+        description="The working database and its backup location. Paths are shown in full so they can be copied into diagnostics or Finder."
+      >
+        <dl className="border-border-default divide-border-subtle divide-y border-y">
+          <Row label="Database" value={database.path ?? "In memory (no file)"} mono />
+          <Row
+            label="Size"
+            value={database.sizeBytes === null ? "—" : formatBytes(database.sizeBytes)}
+            numeric
+          />
+          <Row
+            label="Schema version"
+            value={`${String(database.schemaVersion)} of ${String(database.latestSchemaVersion)}`}
+            numeric
+          />
+          <Row label="Backups" value={database.backupDirectory ?? "—"} mono />
+          <Row label="Backups kept" value={String(database.backupCount)} numeric />
+        </dl>
+      </SettingsBlock>
+    </>
   );
 }
 
@@ -60,10 +66,12 @@ function Row({
   mono?: boolean;
 }) {
   return (
-    <div className="grid gap-1 py-2.5 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-4">
-      <dt className="text-fg-secondary text-xs">{label}</dt>
+    <div className="grid gap-1 px-2 py-3 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-4">
+      <dt className="text-fg-secondary font-mono text-[9px] tracking-[0.08em] uppercase">
+        {label}
+      </dt>
       <dd
-        className={`text-fg-primary min-w-0 break-all text-xs ${mono ? "font-mono text-2xs" : ""}`}
+        className={`text-fg-primary min-w-0 text-xs [overflow-wrap:anywhere] ${mono ? "font-mono text-2xs" : ""}`}
         data-selectable
         {...(numeric ? { "data-numeric": "" } : {})}
       >

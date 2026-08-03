@@ -17,10 +17,13 @@ import {
   columnNamed,
   createProject,
   dialogNamed,
+  expandProject,
   fieldLabelled,
   openMenu,
+  openMenuAt,
   openSettings,
   openTaskMenu,
+  projectDestination,
   setViewportWidth,
   waitForAppReady,
 } from "../support/app.js";
@@ -58,8 +61,45 @@ async function shoot(name: string): Promise<void> {
 /** Puts the board back at its left edge so every shot starts from the same place. */
 async function resetBoardScroll(): Promise<void> {
   await browser.execute(() => {
-    const board = document.querySelector("main > div");
+    const board = document.querySelector("[data-board-scroll]");
     if (board) board.scrollLeft = 0;
+  });
+}
+
+/** Measures the lane geometry in CSS pixels, after the native resize has settled. */
+async function boardGeometry(): Promise<{
+  clientWidth: number;
+  scrollWidth: number;
+  innerLeft: number;
+  innerRight: number;
+  firstLeft: number;
+  lastRight: number;
+  widths: number[];
+}> {
+  return browser.execute(() => {
+    const board = document.querySelector<HTMLElement>("[data-board-scroll]");
+    if (board === null) throw new Error("The board scroller is missing");
+
+    const columns = Array.from(
+      board.querySelectorAll<HTMLElement>(":scope > section[aria-labelledby]"),
+    );
+    if (columns.length === 0) throw new Error("The board has no measurable columns");
+
+    const boardBox = board.getBoundingClientRect();
+    const style = getComputedStyle(board);
+    const first = columns[0]?.getBoundingClientRect();
+    const last = columns.at(-1)?.getBoundingClientRect();
+    if (first === undefined || last === undefined) throw new Error("Column bounds are missing");
+
+    return {
+      clientWidth: board.clientWidth,
+      scrollWidth: board.scrollWidth,
+      innerLeft: boardBox.left + Number.parseFloat(style.paddingLeft),
+      innerRight: boardBox.right - Number.parseFloat(style.paddingRight),
+      firstLeft: first.left,
+      lastRight: last.right,
+      widths: columns.map((column) => column.getBoundingClientRect().width),
+    };
   });
 }
 
@@ -81,14 +121,19 @@ describe("visual review", () => {
     await $('div[role="dialog"]').waitForDisplayed({ reverse: true });
   });
 
-  it("fills a wide window without stretching the columns", async () => {
+  it("fits the complete board across a wide window", async () => {
     await setViewportWidth(1680, 1000);
     await resetBoardScroll();
     await expect(columnNamed("Done")).toBeDisplayed();
+
+    const geometry = await boardGeometry();
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
+    expect(Math.abs(geometry.firstLeft - geometry.innerLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.lastRight - geometry.innerRight)).toBeLessThanOrEqual(1);
     await shoot("board-wide");
   });
 
-  it("shows the whole board on a laptop window", async () => {
+  it("keeps the board readable inside a laptop window", async () => {
     await setViewportWidth(1280, 820);
     await resetBoardScroll();
     await expect(columnNamed("Done")).toBeDisplayed();
@@ -144,32 +189,45 @@ describe("visual review", () => {
 
     expect(overflowing).toStrictEqual([]);
 
+    const geometry = await boardGeometry();
+    expect(geometry.scrollWidth).toBeGreaterThan(geometry.clientWidth);
+    expect(geometry.widths.every((width) => width >= 260)).toBe(true);
+    expect(new Set(geometry.widths.map(Math.round)).size).toBe(1);
+
     await shoot("board-narrow");
   });
 
-  it("leaves the columns their own width on a 1920 display", async () => {
-    // The third of the three widths milestone 8 requires inspecting. A fixed
-    // 320 px column is the point of the design, so the check is that the extra
-    // room becomes empty space rather than five very wide columns.
+  it("fits the real columns across a 1920 display without a phantom action lane", async () => {
     await setViewportWidth(1920, 1080);
     await resetBoardScroll();
     await expect(columnNamed("Done")).toBeDisplayed();
 
-    const widths = await $$("main section[aria-labelledby]").map((section) =>
-      section.getSize("width"),
-    );
-    expect(new Set(widths).size).toBe(1);
-    expect(widths[0]).toBeLessThanOrEqual(320);
+    const geometry = await boardGeometry();
+    expect(new Set(geometry.widths.map(Math.round)).size).toBe(1);
+    expect(geometry.widths[0]).toBeGreaterThanOrEqual(260);
+    expect(geometry.widths[0]).toBeLessThanOrEqual(384);
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
 
     await shoot("board-1920");
+  });
+
+  it("uses the extra width at the supplied 2048px reference size", async () => {
+    await setViewportWidth(2048, 1080);
+    await resetBoardScroll();
+
+    const geometry = await boardGeometry();
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
+    expect(Math.abs(geometry.firstLeft - geometry.innerLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.lastRight - geometry.innerRight)).toBeLessThanOrEqual(1);
+    expect(geometry.widths[0]).toBeGreaterThan(320);
+
+    await shoot("board-2048");
   });
 
   it("keeps a long card readable rather than letting one column grow", async () => {
     await setViewportWidth(1280, 820);
 
-    const widths = await $$("main section[aria-labelledby]").map((section) =>
-      section.getSize("width"),
-    );
+    const widths = (await boardGeometry()).widths;
 
     expect(widths.length).toBe(5);
     expect(new Set(widths).size).toBe(1);
@@ -209,8 +267,20 @@ describe("visual review", () => {
     }
     await dialog.$('section[aria-labelledby="checklist-heading"] input[type="checkbox"]').click();
 
+    await openMenuAt("#task-priority");
+    await shoot("task-priority-menu");
+    await browser.keys("Escape");
+    await $('[role="menu"]').waitForDisplayed({ reverse: true });
+
     await chooseOption("#task-priority", "High");
     await dialog.$("#task-estimate").setValue("3h 30m");
+
+    await dialog.$("#task-due").click();
+    const datePicker = $('[role="dialog"][aria-label="Choose due date"]');
+    await datePicker.waitForDisplayed();
+    await shoot("task-date-picker");
+    await browser.keys("Escape");
+    await datePicker.waitForDisplayed({ reverse: true });
 
     await dialog.$("button=Add tag").click();
     await dialog.$('input[aria-label="Tag name"]').setValue("Accessibility");
@@ -218,6 +288,38 @@ describe("visual review", () => {
     await dialog.$('button[aria-label="Remove Accessibility"]').waitForDisplayed();
 
     await shoot("task-editor");
+
+    await setViewportWidth(1920, 1000);
+    const focusGeometry = await browser.execute(() => {
+      const main = document.querySelector<HTMLElement>("[data-task-editor-main]");
+      const rail = document.querySelector<HTMLElement>("[data-task-editor-rail]");
+      if (main === null || rail === null) throw new Error("Task editor layout is missing");
+
+      main.scrollTop = 0;
+      rail.scrollTop = 0;
+      const mainRect = main.getBoundingClientRect();
+      const railRect = rail.getBoundingClientRect();
+
+      return {
+        viewportWidth: window.innerWidth,
+        mainLeft: mainRect.left,
+        mainRight: mainRect.right,
+        railLeft: railRect.left,
+        railRight: railRect.right,
+        railWidth: railRect.width,
+        documentOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    });
+
+    expect(Math.abs(focusGeometry.mainLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(focusGeometry.mainRight - focusGeometry.railLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(focusGeometry.railRight - focusGeometry.viewportWidth)).toBeLessThanOrEqual(1);
+    expect(focusGeometry.railWidth).toBeGreaterThanOrEqual(340);
+    expect(focusGeometry.railWidth).toBeLessThanOrEqual(360);
+    expect(focusGeometry.documentOverflow).toBeLessThanOrEqual(1);
+    await shoot("task-editor-wide");
+
+    await setViewportWidth(1280, 820);
 
     await dialog.$("button=Save changes").click();
     await dialog.waitForDisplayed({ reverse: true });
@@ -275,12 +377,70 @@ describe("visual review", () => {
     await $("button*=Clear").click();
   });
 
+  it("photographs the full-page notes workspace with its linked work", async () => {
+    await setViewportWidth(1680, 940);
+    await expandProject("Takenkanban");
+    await projectDestination("Takenkanban", "Project Notes").click();
+    const notes = dialogNamed("Project Notes");
+    await notes.waitForDisplayed();
+    await notes.$("h2=Pages").waitForDisplayed();
+    await notes.$('button[aria-label="New note"]').click();
+
+    const title = notes.$("#note-title");
+    const body = notes.$("#note-body");
+    await title.waitForDisplayed();
+    await title.setValue("Accessible movement plan");
+    await body.setValue(
+      "# Objective\n\nMake every movement route feel like one coherent system.\n\n## Working agreement\n\n- Pointer, keyboard, and menu actions share the same transaction.\n- Focus returns to the task after every move.\n\n## Verification\n\n- [x] Board read model\n- [ ] Keyboard announcement pass",
+    );
+
+    await openMenuAt('aside button[aria-label="Link tasks to this note"]');
+    const linkedTask = $(
+      '//*[@role="menuitemcheckbox"][contains(., "Accessible keyboard drag-and-drop")]',
+    );
+    await linkedTask.waitForDisplayed();
+    await linkedTask.click();
+    await browser.keys("Escape");
+
+    await $("h1=Objective").waitForDisplayed({ timeout: 5_000 });
+    await shoot("notes-workspace-dark");
+
+    await notes.$('button[aria-label^="Return to "]').click();
+    await notes.waitForDisplayed({ reverse: true });
+  });
+
+  it("photographs the workspace-wide note index", async () => {
+    await $('//nav[@aria-label="Workspace"]//button[normalize-space(.)="All Notes"]').click();
+
+    const notes = dialogNamed("All Notes");
+    await notes.waitForDisplayed();
+    await notes.$("h1=All notes").waitForDisplayed();
+    await notes.$('button[aria-label="Accessible movement plan, Takenkanban"]').waitForDisplayed();
+    await shoot("all-notes-dark");
+
+    await notes.$('button[aria-label^="Return to "]').click();
+    await notes.waitForDisplayed({ reverse: true });
+  });
+
+  it("photographs the settings workspace", async () => {
+    await setViewportWidth(1440, 900);
+    await openSettings();
+
+    const settings = dialogNamed("Settings");
+    await settings.$('button[aria-label="AI access"]').click();
+    await expect(settings.$("h2=AI access")).toBeDisplayed();
+    await shoot("settings-ai-dark");
+
+    await browser.keys("Escape");
+    await settings.waitForDisplayed({ reverse: true });
+  });
+
   it("photographs the light theme", async () => {
     await waitForAppReady();
     await openSettings();
     const settings = dialogNamed("Settings");
     await settings.waitForDisplayed();
-    await settings.$("button=General").click();
+    await settings.$('button[aria-label="General"]').click();
     await settings.$('//label[normalize-space(.)="Light"]').click();
     await browser.keys("Escape");
     await settings.waitForDisplayed({ reverse: true });
@@ -320,5 +480,17 @@ describe("visual review", () => {
     await browser.execute(() => {
       document.documentElement.style.filter = "";
     });
+  });
+
+  it("photographs the daily field report", async () => {
+    await $('//button[.//span[normalize-space(.)="Dashboard"]]').click();
+    await $("p=Daily field report").waitForDisplayed();
+    await shoot("dashboard-light");
+  });
+
+  it("photographs the project index", async () => {
+    await $('//nav[@aria-label="Breadcrumb"]//button[normalize-space(.)="Projects"]').click();
+    await $("h1=My Projects").waitForDisplayed();
+    await shoot("projects-light");
   });
 });

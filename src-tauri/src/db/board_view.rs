@@ -5,6 +5,7 @@
 //! and the way to meet that is structurally — by not offering a per-card read at
 //! all — rather than by remembering not to call one.
 
+use rmcp::schemars::JsonSchema;
 use rusqlite::Connection;
 use serde::Serialize;
 use ts_rs::TS;
@@ -15,7 +16,7 @@ use crate::db::columns::{self, Column};
 use crate::db::tasks::Task;
 use crate::error::AppResult;
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "BoardSnapshot.ts")]
 pub struct BoardSnapshot {
@@ -40,7 +41,7 @@ pub struct BoardSnapshot {
 /// second pass, and label ids as one grouped query for the whole board. Between
 /// them that is what keeps a full board load at a fixed number of queries
 /// however many cards it holds.
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "BoardTask.ts")]
 pub struct BoardTask {

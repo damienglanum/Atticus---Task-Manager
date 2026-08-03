@@ -4,8 +4,10 @@ import { Bell, ChevronRight, CircleHelp, LayoutGrid, Search } from "lucide-react
 import { useEffect, useMemo, useState } from "react";
 
 import { IconButton } from "@/components/ui/Button";
+import { DialogPage } from "@/components/ui/Dialog";
 import { Toaster } from "@/components/ui/Toaster";
 import { HelpDialog } from "@/features/settings/HelpDialog";
+import { AllNotesView } from "@/features/notes/AllNotesView";
 import { NotesView } from "@/features/notes/NotesView";
 import { NameDialog } from "@/features/profile/NameDialog";
 import { useProfileName, useSetProfileName } from "@/features/profile/queries";
@@ -59,6 +61,13 @@ type ProjectDialogState =
 type BoardDialogState =
   { mode: "closed" } | { mode: "create"; projectId: string } | { mode: "rename"; board: Board };
 
+type ShellView = Exclude<WorkspaceView, "notes">;
+
+type NotesPage =
+  | { kind: "closed" }
+  | { kind: "all"; returnView: ShellView }
+  | { kind: "project"; projectId: string; returnView: ShellView };
+
 export function App() {
   const client = useQueryClient();
   useMcpChanges(client);
@@ -92,7 +101,12 @@ export function App() {
   const workspace = useWorkspace();
   const setWorkspace = useSetWorkspace();
   const projects = useProjects(true);
+  const mcpSettings = useQuery({
+    queryKey: queryKeys.mcpSettings(),
+    queryFn: () => ipc.mcpSettingsGet(),
+  });
   const mcpBoards = useMcpManagedBoards();
+  const aiAccessEnabled = mcpSettings.data !== undefined && mcpSettings.data.access !== "disabled";
   const selectedProjectId = workspace.data?.projectId ?? null;
   const boards = useBoards(selectedProjectId);
   const selectedBoardId = workspace.data?.boardId ?? null;
@@ -105,9 +119,12 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [requestedTaskId, setRequestedTaskId] = useState<string | null>(null);
   const [renamingProfile, setRenamingProfile] = useState(false);
-  const [view, setView] = useState<WorkspaceView>("board");
+  const [view, setView] = useState<ShellView>("board");
+  const [notesPage, setNotesPage] = useState<NotesPage>({ kind: "closed" });
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle" });
   const [updateRestarting, setUpdateRestarting] = useState(false);
+  const notesProjectId = notesPage.kind === "project" ? notesPage.projectId : null;
+  const projectNotesBoards = useBoards(notesProjectId);
 
   useEffect(() => {
     const lifecycle = { active: true };
@@ -232,11 +249,13 @@ export function App() {
 
   const openBoard = (board: Board) => {
     setWorkspace.mutate({ projectId: board.projectId, boardId: board.id });
+    setNotesPage({ kind: "closed" });
     setView("board");
   };
 
   const openProject = (project: Project) => {
     setWorkspace.mutate({ projectId: project.id, boardId: null });
+    setNotesPage({ kind: "closed" });
     setView("board");
   };
 
@@ -278,22 +297,48 @@ export function App() {
     setBoardDialog({ mode: "closed" });
   };
 
+  const navigateWorkspace = (next: WorkspaceView) => {
+    if (next === "notes") {
+      setNotesPage({ kind: "all", returnView: view });
+      return;
+    }
+    setNotesPage({ kind: "closed" });
+    setView(next);
+  };
+
+  const notesProject =
+    notesPage.kind === "project"
+      ? (active.find((project) => project.id === notesPage.projectId) ?? null)
+      : null;
+  const notesReturnView = notesPage.kind === "closed" ? view : notesPage.returnView;
+  const notesBackLabel =
+    notesReturnView === "dashboard"
+      ? "Return to dashboard"
+      : notesReturnView === "projects"
+        ? "Return to projects"
+        : `Return to ${selectedProject?.name ?? "the workspace"}`;
+
   return (
     <div className="bg-surface-app text-fg-primary flex h-full">
       <ProjectSidebar
         active={personalActive}
         archived={personalArchived}
+        aiAccessEnabled={aiAccessEnabled}
         mcpProjects={mcpProjects}
         mcpBoards={mcpBoards.data ?? []}
-        selectedId={selectedProjectId}
+        selectedId={notesProjectId ?? selectedProjectId}
         selectedBoardId={selectedBoardId}
-        view={view}
-        onNavigate={setView}
+        notesProjectId={notesProjectId}
+        view={notesPage.kind === "closed" ? view : "notes"}
+        onNavigate={navigateWorkspace}
         profileName={profileName.data ?? ""}
         onRenameProfile={() => {
           setRenamingProfile(true);
         }}
         onSelect={openProject}
+        onOpenProjectNotes={(project) => {
+          setNotesPage({ kind: "project", projectId: project.id, returnView: view });
+        }}
         onSelectMcpBoard={openBoard}
         onCreateMcpBoard={(project) => {
           setBoardDialog({ mode: "create", projectId: project.id });
@@ -334,7 +379,7 @@ export function App() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-border-subtle flex h-14 shrink-0 items-center justify-between gap-4 border-b px-5">
+        <header className="border-border-subtle bg-surface-app relative z-(--z-sticky) flex h-14 shrink-0 items-center justify-between gap-5 border-b px-6">
           <Breadcrumb
             projectName={selectedProject?.name ?? null}
             view={view}
@@ -352,7 +397,7 @@ export function App() {
 
             <IconButton
               label="Keyboard shortcuts and help"
-              className="size-9"
+              className="size-8"
               onClick={() => {
                 setHelpOpen(true);
               }}
@@ -399,8 +444,6 @@ export function App() {
             />
           ) : view === "projects" ? (
             <ProjectsView projects={personalActive} onOpen={openProject} />
-          ) : view === "notes" ? (
-            <NotesView projectId={selectedProjectId} projectName={selectedProject?.name ?? null} />
           ) : selectedProject === null ? (
             <NoProjectYet />
           ) : selectedBoardId === null ? (
@@ -446,6 +489,73 @@ export function App() {
           )}
         </main>
       </div>
+
+      <DialogPage
+        open={notesPage.kind !== "closed"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setNotesPage({ kind: "closed" });
+            setView(notesReturnView);
+          }
+        }}
+        title={notesPage.kind === "all" ? "All Notes" : "Project Notes"}
+        description="Plans, decisions, and linked task context, kept inside the project they belong to."
+        breadcrumb={
+          <p className="text-fg-secondary font-mono text-[9px] tracking-[0.12em] uppercase">
+            Atticus / {notesPage.kind === "all" ? "workspace" : (notesProject?.name ?? "project")}
+          </p>
+        }
+        backLabel={notesBackLabel}
+        bodyClassName="overflow-hidden"
+      >
+        {notesPage.kind === "all" ? (
+          <AllNotesView
+            projects={active}
+            onOpenTask={(task) => {
+              setWorkspace.mutate(
+                { projectId: task.projectId, boardId: task.boardId },
+                {
+                  onSuccess: () => {
+                    setRequestedTaskId(task.id);
+                    setNotesPage({ kind: "closed" });
+                    setView("board");
+                  },
+                  onError: (error: unknown) => {
+                    notifyError(describeAppError(toAppError(error)));
+                  },
+                },
+              );
+            }}
+          />
+        ) : notesPage.kind === "project" && notesProject !== null ? (
+          <NotesView
+            key={notesProject.id}
+            projectId={notesProject.id}
+            projectName={notesProject.name}
+            projectKeyPrefix={notesProject.keyPrefix}
+            boards={projectNotesBoards.data ?? []}
+            onOpenTask={(task) => {
+              setWorkspace.mutate(
+                { projectId: task.projectId, boardId: task.boardId },
+                {
+                  onSuccess: () => {
+                    setRequestedTaskId(task.id);
+                    setNotesPage({ kind: "closed" });
+                    setView("board");
+                  },
+                  onError: (error: unknown) => {
+                    notifyError(describeAppError(toAppError(error)));
+                  },
+                },
+              );
+            }}
+          />
+        ) : (
+          <p className="text-fg-secondary p-6 text-sm">
+            This project is no longer available. Return to the workspace and choose another.
+          </p>
+        )}
+      </DialogPage>
 
       {projectDialog.mode !== "closed" ? (
         <ProjectDialog
@@ -504,6 +614,8 @@ export function App() {
             // project that is not even open.
             setWorkspace.mutate({ projectId: hit.projectId, boardId: hit.boardId });
             setRequestedTaskId(hit.taskId);
+            setNotesPage({ kind: "closed" });
+            setView("board");
           }}
           commands={[
             {
@@ -511,6 +623,7 @@ export function App() {
               label: "Open settings",
               icon: "settings",
               run: () => {
+                setNotesPage({ kind: "closed" });
                 setSettingsOpen(true);
               },
             },
@@ -576,19 +689,10 @@ function Breadcrumb({
   onHome,
 }: {
   projectName: string | null;
-  view: WorkspaceView;
+  view: ShellView;
   onHome: () => void;
 }) {
-  const leaf =
-    view === "dashboard"
-      ? "Dashboard"
-      : view === "notes"
-        ? projectName === null
-          ? "Notes"
-          : `${projectName} · Notes`
-        : view === "projects"
-          ? null
-          : projectName;
+  const leaf = view === "dashboard" ? "Dashboard" : view === "projects" ? null : projectName;
 
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">
@@ -630,7 +734,7 @@ function AttentionBell({ count, onOpen }: { count: number; onOpen: () => void })
           ? "Nothing needs attention"
           : `${String(count)} ${count === 1 ? "thing needs" : "things need"} attention`
       }
-      className="relative size-9"
+      className="relative size-8"
       onClick={onOpen}
     >
       <Bell size={16} aria-hidden />
@@ -666,9 +770,8 @@ function SearchField({ onOpen }: { onOpen: () => void }) {
       type="button"
       onClick={onOpen}
       className={cn(
-        "border-border-subtle bg-surface-column text-fg-secondary hover:border-border-default",
-        "flex h-9 w-72 max-w-[40vw] shrink-0 cursor-default items-center gap-2 rounded-lg border px-3 text-sm",
-        "transition-colors duration-(--duration-fast)",
+        "border-border-subtle bg-transparent text-fg-secondary hover:border-border-default hover:text-fg-primary",
+        "flex h-8 w-64 max-w-[36vw] shrink-0 cursor-default items-center gap-2 rounded-md border px-3 text-sm",
       )}
     >
       <Search size={14} aria-hidden className="shrink-0" />

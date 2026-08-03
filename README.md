@@ -146,14 +146,16 @@ Atticus includes a permissioned local MCP server in the same application executa
 **Settings → AI access**, then add the command shown there to Codex, Claude, or another MCP client
 with the `--mcp` argument. Read/write access is confined to projects the MCP created itself, shown
 under the collapsible **AI Boards** sidebar section. Existing and user-created projects remain
-write-protected even if the AI knows their IDs. Inside that sandbox it can create or update boards,
-columns, tasks, descriptions, subtasks, labels, links, guarded file references, and task status.
-Destructive tools are not exposed.
+write-protected even if the AI knows their IDs. Inside that sandbox it can create projects, boards,
+columns, tasks, subtasks, and labels; patch live tasks and subtasks; replace task-label assignments;
+move task status; and append guarded links or file references. Delete, archive, restore, and removal
+tools are not exposed. Archived work is read-only through MCP.
 
-The server attaches workflow instructions to every connection so the AI inspects before writing,
-moves real work to **In Progress**, keeps focus-mode details current, and moves it to **Done** only
-after verification succeeds. See [`docs/mcp.md`](docs/mcp.md) for setup, permissions, the tool list,
-and the boundary between session-driven updates and a persistent background agent.
+The server publishes versioned workflow instructions, strict JSON schemas, structured errors, and
+MCP safety annotations on every connection. It tells a model when it is authorized to write, how to
+discover current IDs, how to avoid stale or duplicate updates, and when work may move to **Done**.
+See [`docs/mcp.md`](docs/mcp.md) for setup, permissions, tool contracts, recovery recipes, and the
+boundary between session-driven updates and a persistent background agent.
 
 ## Where your data lives
 

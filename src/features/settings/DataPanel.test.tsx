@@ -40,6 +40,7 @@ function plan(partial: Partial<ImportPlan> = {}): ImportPlan {
     linkRefs: 0,
     savedFilters: 0,
     notes: 0,
+    noteTaskLinks: 0,
     ...partial,
   };
 }

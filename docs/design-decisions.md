@@ -70,8 +70,9 @@ offered in v1 (projects use a colour).
 icon plus a text label. A WIP breach shows a count, an icon, and a border change. Every one of these
 survives greyscale, which is the test we actually run in milestone 8.
 
-**Density baseline: 4 px.** Everything is a multiple of 4. Column width 300 px fixed (never below
-260). Card vertical rhythm in 4 px steps.
+**Density baseline: 4 px.** Everything is a multiple of 4. Board columns share
+the available width equally between 260 and 384 px, then scroll rather than
+shrinking below that readable floor. Card vertical rhythm stays in 4 px steps.
 
 ## 4. Three directions
 
@@ -292,8 +293,10 @@ The brief was a set of mockups; what follows is what they asked for, and what wa
   anything, and this is what does it. It is also the one change that costs density: a column shows
   fewer cards than it did, which §5 explicitly traded the other way. The trade is reversed because
   a card that must be opened to be understood is not a card that saved you anything.
-- **The task editor is a page, not a floating dialog** — full window, its own header, a two-column
-  body with a metadata rail. It is still a Radix dialog underneath (`DialogPage`): Escape, focus
+- **The task editor is a page, not a floating dialog** — full window, its own header, and an
+  edge-to-edge body with a fixed metadata rail. The main workspace becomes a writing column plus a
+  supporting checklist/reference column when the window is wide enough; it never returns to a
+  centred outer canvas. It is still a Radix dialog underneath (`DialogPage`): Escape, focus
   trapping, focus restoration and `aria-hidden` on the background are not worth reimplementing for
   a visual result that does not depend on them.
 
@@ -397,16 +400,17 @@ the contour map, drawn in line rather than filled. Linework has no inside, so it
 takes `currentColor` from whatever it sits in and needs no separate contrast
 argument for a glyph — the tile did.
 
-**It sheds rings as it shrinks.** Eight contours inside a 26 px sidebar mark is
-one ring every 1.6 px, which is a smudge. Below 28 px it draws three; below
-56 px, five; above that, all eight.
+**It sheds rings as it shrinks.** Eight contours inside a compact sidebar mark
+is a smudge. Below 25 px it draws two; the 36 px sidebar lockup draws three;
+medium marks step through four and five; from 96 px the full eight-ring artwork
+has enough room to breathe.
 
 Two things had to be got right for that to work, and the first attempt got both
 wrong:
 
 - **The frame shrinks with the artwork.** Slicing the outer rings off while
   keeping the 360 × 360 canvas leaves the survivors in the middle of a mostly
-  empty box. Rendered at 26 px it was a speck with a wide margin. `VIEW_BOXES`
+  empty box. Rendered at sidebar size it was a speck with a wide margin. `VIEW_BOXES`
   in `logoContours.ts` holds a computed square box per ring count.
 - **The stroke is specified in rendered pixels, not viewBox units.** The source
   art's 2.2 units is right at 360 px and renders 0.4 px at 64 px — which made
@@ -422,14 +426,39 @@ duplicated, would drift the first time one was nudged.
 A real second Tauri window, not a React screen inside the app. By the time React
 can paint, the slow part of a cold launch is over; a splash that appears then is
 just a delay. `splash.html` is a second Vite entry with inline CSS and no
-framework — about 30 kB of JavaScript, against the app bundle's 745 kB.
+framework. The current composition puts a 156 px contour mark beside a quiet
+divider, the Atticus wordmark, and a small `LOCAL WORKSPACE` status line. It is a
+launch identity rather than a miniature version of the application shell.
 
-**The animation is compressed from 5.067 s to 1.5 s, and does not gate anything.**
-Five seconds is a title sequence. Milestone 10 measures cold-launch-to-board as a
-release gate, and holding the user for the animation's sake would mean measuring
-a decision rather than the application. Two signals — `splash_animation_finished`
-from the splash, `app_ready` from the shell — and whichever arrives second closes
-the window. A warm start is not padded; a cold one is not cut off mid-stroke.
+**SVG plus the native Web Animations API is the right amount of machinery.** The
+eight supplied paths already describe the artwork exactly, and WAAPI can reveal
+their strokes without adding React, a timeline dependency, or a rendering
+context before the first useful paint. Anime.js would only replace a small
+native timeline; WebGL would add shaders, a canvas, and context-loss handling to
+a two-dimensional line drawing. Both would make startup less reliable without
+changing what the user sees.
+
+**The essential reveal lasts 1.65 s.** Contours resolve from the centre outward,
+a brief cyan tracing front settles into the finished mark, then the divider,
+wordmark, and workspace line arrive. The halo and status point may breathe after
+that while a cold database is still opening, but ambient motion is not part of
+the hand-off. The supplied 5.067 s sequence was still too much of a title
+sequence; the earlier 1.5 s draw felt rushed once the wordmark joined it.
+
+Two signals — `splash_animation_finished` from the splash and `app_ready` from
+the shell — control the transition, and whichever arrives second shows the main
+window. A fast start therefore gives the 1.65 s reveal room to land; a cold start
+is never cut off and never closes before the workspace is ready. With Reduced
+Motion enabled, the splash settles directly into its completed frame and reports
+completion immediately; the halo and status-point loops are disabled too.
+
+The hand-off fails open at both ends. The splash script races the native
+animation promises with a short bounded guard and reports completion even if its
+root is missing or an animation API throws. Once `app_ready` has arrived, Rust
+also starts a one-shot 2.8 s watchdog. If the splash's JavaScript or IPC message
+never arrives, the watchdog still shows the main window before closing the
+splash. An atomic claim keeps duplicate commands and the watchdog from swapping
+the windows twice.
 
 The main window is created with `visible: false` and shown by the same handshake.
 Without that, the OS draws an empty white frame beside the splash for the whole
@@ -447,20 +476,29 @@ launch experience is not what those specs are testing.
 ### The application icons
 
 Generated by `scripts/generate-icons.py`, not exported by hand, and **drawn once
-per size rather than downscaled from one master**. The packaged icon deliberately
-uses the same three-contour geometry as the 26 px sidebar mark: the fuller
-five- and eight-contour variants turn into visual noise in the Dock and browser
-tabs. Each size still receives its own line weight, and those renders are packed
-directly into the `.icns` standard multi-resolution entries.
+per logical size and pixel density rather than downscaled from one master**. The
+packaged icon deliberately uses the same three-contour geometry as the 36 px
+sidebar mark; 16–32 px representations drop to two. Fuller five- and
+eight-contour variants turn into visual noise in the Dock and browser tabs.
+Standard and Retina renders receive independent line weights and are packed
+directly into their matching `.icns` entries.
+
+The line weight scales with the artwork above compact sizes. Capping the 1024 px
+source at a 2.2 px line made the cyan less than a pixel after macOS downsampled
+it, which read as fog rather than a mark. Placement uses the length-weighted
+centre of the visible strokes as well: control-point bounds left this asymmetric
+shape visibly low and right even when its SVG box was mathematically centred.
 
 The script reads the geometry from `logoContours.ts`, so the icon and the
 interface cannot disagree about what the mark is. It needs Pillow and is not
 part of `npm run verify`: it writes binary assets that are checked in, and it is
 run when the mark changes.
 
-The artwork is the simplified contour mark in the dark sidebar's `#4ccce6`
-accent blue on a `#0b0c0d` black tile, inside a rounded square with the 10%
-margin macOS expects to be baked into the image.
+The artwork is the simplified contour mark in a crisp `#6ee2f1` cyan on a
+cool graphite tile, inside a rounded square with a 10% baked-in margin. A narrow
+rim and restrained vertical value shift keep the tile legible in a dark Dock;
+there is no glow or blur. The small representation gets real foreground pixels
+instead of a halo that turns grey when resampled.
 
 ### The name
 

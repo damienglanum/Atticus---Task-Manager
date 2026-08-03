@@ -223,7 +223,7 @@ describe("accessibility", () => {
     });
 
     await openSettings();
-    await $('//div[@role="dialog"]//button[normalize-space(.)="General"]').click();
+    await $('//div[@role="dialog"]//button[@aria-label="General"]').click();
     await $('//div[@role="dialog"]//label[normalize-space(.)="Light"]').click();
 
     // The class is written by an effect that runs after the preference query

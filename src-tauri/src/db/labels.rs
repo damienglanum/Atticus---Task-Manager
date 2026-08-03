@@ -4,7 +4,8 @@
 //! review" means the same thing across every board in a project, and a label
 //! that had to be recreated per board would stop being a way to find things.
 
-use rusqlite::{Connection, OptionalExtension, Row};
+use rmcp::schemars::JsonSchema;
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -13,7 +14,7 @@ use crate::db::projects::new_id;
 use crate::domain::validate;
 use crate::error::{AppError, AppResult};
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "Label.ts")]
 pub struct Label {
@@ -246,6 +247,54 @@ pub fn set_for_task(conn: &mut Connection, task_id: &str, label_ids: &[String]) 
         "UPDATE tasks SET updated_at = ?2 WHERE id = ?1",
         rusqlite::params![task_id, now_ms()],
     )?;
+    tx.commit()?;
+
+    Ok(())
+}
+
+/// Replaces labels only when the parent task still has the timestamp the
+/// caller read. The timestamp compare, replacement, and new timestamp commit
+/// together, so a desktop edit can never be silently overwritten by MCP.
+pub fn set_for_task_if_current(
+    conn: &mut Connection,
+    task_id: &str,
+    label_ids: &[String],
+    expected_updated_at: i64,
+) -> AppResult<()> {
+    let task = crate::db::tasks::find(conn, task_id)?;
+    for label_id in label_ids {
+        let label = find(conn, label_id)?;
+        if label.project_id != task.project_id {
+            return Err(AppError::Conflict {
+                message: "That label belongs to a different project.".to_owned(),
+            });
+        }
+    }
+
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let updated_at = now_ms().max(task.updated_at.saturating_add(1));
+    let changed = tx.execute(
+        "UPDATE tasks SET updated_at = ?2 WHERE id = ?1 AND updated_at = ?3",
+        rusqlite::params![task_id, updated_at, expected_updated_at],
+    )?;
+    if changed == 0 {
+        let current = crate::db::tasks::find(&tx, task_id)?;
+        return Err(AppError::Conflict {
+            message: format!(
+                "Task {task_id} changed after it was read (expected updatedAt {expected_updated_at}, current {}). Call atticus_get_task, merge with current labelIds, and retry using the new updatedAt.",
+                current.updated_at
+            ),
+        });
+    }
+
+    tx.execute("DELETE FROM task_labels WHERE task_id = ?1", [task_id])?;
+    {
+        let mut insert =
+            tx.prepare("INSERT INTO task_labels (task_id, label_id) VALUES (?1, ?2)")?;
+        for label_id in label_ids {
+            insert.execute(rusqlite::params![task_id, label_id])?;
+        }
+    }
     tx.commit()?;
 
     Ok(())

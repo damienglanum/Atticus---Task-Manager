@@ -1,0 +1,87 @@
+{
+  "exportVersion": 4,
+  "generatedAt": "2026-08-03T00:00:00.000Z",
+  "app": "atticus",
+  "appVersion": "0.1.0",
+  "data": {
+    "projects": [
+      {
+        "id": "v4-project",
+        "name": "Linked fieldbook fixture",
+        "description": "Pins note/task links in export version 4.",
+        "color": "indigo",
+        "keyPrefix": "VFR",
+        "nextTaskNumber": 2,
+        "directoryPath": null,
+        "position": 0,
+        "archivedAt": null,
+        "createdAt": 1754179200000,
+        "updatedAt": 1754179200000
+      }
+    ],
+    "boards": [
+      {
+        "id": "v4-board",
+        "projectId": "v4-project",
+        "name": "Work",
+        "position": 0,
+        "createdAt": 1754179200000,
+        "updatedAt": 1754179200000
+      }
+    ],
+    "columns": [
+      {
+        "id": "v4-column",
+        "boardId": "v4-board",
+        "name": "Todo",
+        "wipLimit": null,
+        "position": 0,
+        "createdAt": 1754179200000,
+        "updatedAt": 1754179200000
+      }
+    ],
+    "tasks": [
+      {
+        "id": "v4-task",
+        "projectId": "v4-project",
+        "boardId": "v4-board",
+        "columnId": "v4-column",
+        "number": 1,
+        "title": "A linked task",
+        "description": "",
+        "priority": 0,
+        "dueDate": null,
+        "estimateMinutes": null,
+        "position": 0,
+        "archivedAt": null,
+        "createdAt": 1754179200000,
+        "updatedAt": 1754179200000
+      }
+    ],
+    "subtasks": [],
+    "labels": [],
+    "taskLabels": [],
+    "fileRefs": [],
+    "linkRefs": [],
+    "savedFilters": [],
+    "notes": [
+      {
+        "id": "v4-note",
+        "projectId": "v4-project",
+        "title": "A linked note",
+        "body": "This note plans a real task.",
+        "position": 0,
+        "createdAt": 1754179200000,
+        "updatedAt": 1754179200000
+      }
+    ],
+    "noteTaskLinks": [
+      {
+        "noteId": "v4-note",
+        "taskId": "v4-task",
+        "position": 0,
+        "createdAt": 1754179200000
+      }
+    ]
+  }
+}

@@ -49,7 +49,31 @@ export function dialogNamed(title: string) {
 /** Waits for the shell to have finished its first load. */
 export async function waitForAppReady(): Promise<void> {
   await pinWindow();
-  await $('//button[normalize-space(.)="Settings"]').waitForDisplayed({ timeout: 20_000 });
+
+  const settings = $('button[aria-label="Workspace settings"]');
+  const firstRunName = $("#profile-name");
+
+  // Every E2E run gets a fresh database. That means the desktop can quite
+  // legitimately open on first-run setup rather than the workspace shell.
+  // Complete that one local field here so every caller of this helper starts
+  // from the same useful state (and a test cannot silently wait on Settings
+  // while the application is waiting for a name).
+  await browser.waitUntil(
+    async () =>
+      (await settings.isDisplayed().catch(() => false)) ||
+      (await firstRunName.isDisplayed().catch(() => false)),
+    {
+      timeout: 20_000,
+      timeoutMsg: "Atticus opened neither the workspace nor first-run setup",
+    },
+  );
+
+  if (await firstRunName.isDisplayed().catch(() => false)) {
+    await firstRunName.setValue("Atticus Test");
+    await $('//button[normalize-space(.)="Continue"]').click();
+  }
+
+  await settings.waitForDisplayed({ timeout: 20_000 });
 }
 
 /**
@@ -89,7 +113,7 @@ export async function openSettings(): Promise<void> {
 
   const dialog = dialogNamed("Settings");
   if (!(await dialog.isExisting())) {
-    await $('//button[normalize-space(.)="Settings"]').click();
+    await $('button[aria-label="Workspace settings"]').click();
     await dialog.waitForDisplayed();
   }
 }
@@ -154,6 +178,41 @@ export function fieldLabelled(label: string) {
 
 export function projectInSidebar(name: string) {
   return $(`//nav[@aria-label="Workspace"]//button[@aria-label="${name}"]`);
+}
+
+/** The disclosure that owns one personal project's nested navigation. */
+export function projectDisclosure(name: string) {
+  return $(`//nav[@aria-label="Workspace"]//button[@aria-label="${name}" and @aria-controls]`);
+}
+
+/** Opens a project's navigation only when it is currently collapsed. */
+export async function expandProject(name: string): Promise<void> {
+  const disclosure = projectDisclosure(name);
+  await disclosure.waitForDisplayed();
+
+  if ((await disclosure.getAttribute("aria-expanded")) !== "true") {
+    await disclosure.click();
+  }
+
+  await browser.waitUntil(async () => (await disclosure.getAttribute("aria-expanded")) === "true", {
+    timeoutMsg: `${name} project navigation did not expand`,
+  });
+}
+
+type ProjectDestination = "Board View" | "Project Notes" | "Settings";
+
+/** Finds a project destination through the exact name exposed to assistive technology. */
+export function projectDestination(projectName: string, destination: ProjectDestination) {
+  const accessibleName =
+    destination === "Board View"
+      ? `Board view for ${projectName}`
+      : destination === "Project Notes"
+        ? `Project notes for ${projectName}`
+        : `Project settings for ${projectName}`;
+
+  return $(
+    `//nav[@aria-label="Workspace"]//ul[@aria-label="${projectName} project navigation"]//button[@aria-label="${accessibleName}"]`,
+  );
 }
 
 export function columnNamed(name: string) {
@@ -236,29 +295,14 @@ export async function chooseMenuItem(label: string): Promise<void> {
   await $('[role="menu"]').waitForDisplayed({ reverse: true });
 }
 
-/**
- * Picks an option in a native `<select>`.
- *
- * WebdriverIO's `selectByVisibleText` does not change the value under the
- * embedded WKWebView driver — verified by reading the value back, which stayed
- * on the default. This sets it through the native property setter and then
- * dispatches a bubbling `change`, which is the event a real selection produces
- * and the one React listens for.
- *
- * The selector is re-queried inside the page rather than passed as an element
- * reference: this driver delivers such references as empty objects, so the
- * function body would receive something with no `options` on it.
- *
- * A driver workaround, and only that: the control under test is an ordinary
- * `<select>` and is untouched by it.
- */
+/** Picks from either a native select or Atticus's Radix radio menu. */
 export async function chooseOption(selector: string, visibleText: string): Promise<void> {
   await $(selector).waitForDisplayed();
 
-  await browser.execute(
+  const nativeSelect = await browser.execute(
     (cssSelector: string, text: string) => {
       const element = document.querySelector<HTMLSelectElement>(cssSelector);
-      if (!element) throw new Error(`no select matching ${cssSelector}`);
+      if (!(element instanceof HTMLSelectElement)) return false;
 
       const option = Array.from(element.options).find(
         (candidate) => candidate.textContent.trim() === text,
@@ -269,10 +313,19 @@ export async function chooseOption(selector: string, visibleText: string): Promi
       // method out of the property descriptor.
       Reflect.set(HTMLSelectElement.prototype, "value", option.value, element);
       element.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
     },
     selector,
     visibleText,
   );
+
+  if (nativeSelect) return;
+
+  await openMenuAt(selector);
+  const item = $(`//*[@role="menuitemradio" and @aria-label="${visibleText}"]`);
+  await item.waitForDisplayed();
+  await item.click();
+  await $('[role="menu"]').waitForDisplayed({ reverse: true });
 }
 
 /** The titles of a column's cards, top to bottom. */

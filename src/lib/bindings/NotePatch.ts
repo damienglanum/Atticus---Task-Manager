@@ -4,4 +4,9 @@
  * A partial update. An absent field means "leave it alone", which is what lets
  * the editor save a title without having to send the whole body back.
  */
-export type NotePatch = { title: string | null, body: string | null, };
+export type NotePatch = { title: string | null, body: string | null, 
+/**
+ * When present, replaces the complete ordered association set. An empty
+ * list deliberately clears it; absence leaves it unchanged.
+ */
+taskIds: Array<string> | null, };

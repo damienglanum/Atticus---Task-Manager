@@ -46,6 +46,7 @@ function useBoardInvalidation(boardId: string) {
     Promise.all([
       client.invalidateQueries({ queryKey: queryKeys.board(boardId) }),
       client.invalidateQueries({ queryKey: queryKeys.archivedTasks(boardId) }),
+      client.invalidateQueries({ queryKey: queryKeys.allNotes() }),
       client.invalidateQueries({ queryKey: queryKeys.undoAvailable() }),
     ]);
 }

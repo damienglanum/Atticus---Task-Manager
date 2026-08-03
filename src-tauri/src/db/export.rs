@@ -10,8 +10,8 @@ use ts_rs::TS;
 
 use crate::domain::export_format::{
     ExportBoard, ExportColumn, ExportData, ExportDocument, ExportFileRef, ExportLabel,
-    ExportLinkRef, ExportNote, ExportProject, ExportSavedFilter, ExportSubtask, ExportTask,
-    ExportTaskLabel, CURRENT_EXPORT_VERSION, EXPORT_APP,
+    ExportLinkRef, ExportNote, ExportNoteTaskLink, ExportProject, ExportSavedFilter, ExportSubtask,
+    ExportTask, ExportTaskLabel, CURRENT_EXPORT_VERSION, EXPORT_APP,
 };
 use crate::error::AppResult;
 
@@ -53,6 +53,7 @@ pub fn export(
             link_refs: link_refs(conn, project_id)?,
             saved_filters: saved_filters(conn, project_id)?,
             notes: notes(conn, project_id)?,
+            note_task_links: note_task_links(conn, project_id)?,
         },
     })
 }
@@ -369,6 +370,34 @@ fn notes(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<ExportNot
     )
 }
 
+fn note_task_links(
+    conn: &Connection,
+    project_id: Option<&str>,
+) -> AppResult<Vec<ExportNoteTaskLink>> {
+    const COLUMNS: &str = "ntl.note_id, ntl.task_id, ntl.position, ntl.created_at";
+
+    query(
+        conn,
+        &format!("SELECT {COLUMNS} FROM note_task_links ntl ORDER BY ntl.note_id, ntl.position"),
+        &format!(
+            "SELECT {COLUMNS} FROM note_task_links ntl \
+             JOIN notes note ON note.id = ntl.note_id \
+             JOIN tasks task ON task.id = ntl.task_id \
+             WHERE note.project_id = ?1 AND task.project_id = ?1 \
+             ORDER BY ntl.note_id, ntl.position"
+        ),
+        project_id,
+        |row| {
+            Ok(ExportNoteTaskLink {
+                note_id: row.get(0)?,
+                task_id: row.get(1)?,
+                position: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        },
+    )
+}
+
 fn saved_filters(conn: &Connection, project_id: Option<&str>) -> AppResult<Vec<ExportSavedFilter>> {
     const COLUMNS: &str = "id, project_id, name, filter, position, created_at, updated_at";
 
@@ -448,6 +477,22 @@ mod tests {
             .expect("task");
 
             subtasks::create(db.connection_mut(), &task.id, "A subtask").expect("subtask");
+            let note_id = crate::db::projects::new_id();
+            db.connection()
+                .execute(
+                    "INSERT INTO notes \
+                       (id, project_id, title, body, position, created_at, updated_at) \
+                     VALUES (?1, ?2, 'A linked note', '', 0, 1, 1)",
+                    [&note_id, &task.project_id],
+                )
+                .expect("note");
+            db.connection()
+                .execute(
+                    "INSERT INTO note_task_links (note_id, task_id, position, created_at) \
+                     VALUES (?1, ?2, 0, 1)",
+                    [&note_id, &task.id],
+                )
+                .expect("note/task link");
             if task.project_id == first.id {
                 link_refs::add(db.connection_mut(), &task.id, "https://example.com/spec")
                     .expect("link");
@@ -485,6 +530,12 @@ mod tests {
         assert_eq!(document.data.subtasks.len(), 2);
         assert_eq!(document.data.labels.len(), 1);
         assert_eq!(document.data.link_refs.len(), 1);
+        assert_eq!(document.data.note_task_links.len(), 2);
+        assert!(document
+            .data
+            .note_task_links
+            .iter()
+            .all(|link| link.position == 0 && link.created_at == 1));
     }
 
     #[test]
@@ -506,6 +557,7 @@ mod tests {
         assert_eq!(document.data.subtasks.len(), 1);
         assert_eq!(document.data.labels.len(), 1);
         assert_eq!(document.data.link_refs.len(), 1);
+        assert_eq!(document.data.note_task_links.len(), 1);
 
         // The scoping assertion that actually bites: every row that carries a
         // project must carry *this* one, checked rather than counted.
@@ -519,6 +571,24 @@ mod tests {
             .labels
             .iter()
             .all(|label| label.project_id == fixture.first));
+        let exported_note_ids: std::collections::HashSet<&str> = document
+            .data
+            .notes
+            .iter()
+            .map(|note| note.id.as_str())
+            .collect();
+        let exported_task_ids: std::collections::HashSet<&str> = document
+            .data
+            .tasks
+            .iter()
+            .map(|task| task.id.as_str())
+            .collect();
+        assert!(document
+            .data
+            .note_task_links
+            .iter()
+            .all(|link| exported_note_ids.contains(link.note_id.as_str())
+                && exported_task_ids.contains(link.task_id.as_str())));
         assert_ne!(fixture.first, fixture.second);
     }
 

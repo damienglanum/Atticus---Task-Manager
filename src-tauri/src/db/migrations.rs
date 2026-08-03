@@ -38,6 +38,11 @@ pub const MIGRATIONS: &[Migration] = &[
         description: "MCP-managed project boundary",
         sql: include_str!("schema/m0004_mcp_managed_projects.sql"),
     },
+    Migration {
+        version: 5,
+        description: "ordered note task links",
+        sql: include_str!("schema/m0005_note_task_links.sql"),
+    },
 ];
 
 /// The version this build knows how to produce.
@@ -266,6 +271,103 @@ mod tests {
             "an upgrade must snapshot the database first, found: {:?}",
             backups.iter().map(|b| &b.label).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn version_four_upgrades_to_ordered_note_task_links_without_changing_existing_rows() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join(crate::db::DATABASE_FILE_NAME);
+
+        {
+            let released_v4 = &MIGRATIONS[..MIGRATIONS.len() - 1];
+            let db = Database::open_with(&path, released_v4).expect("v4 opens");
+            assert_eq!(current_version(db.connection()).expect("version"), 4);
+            db.connection()
+                .execute_batch(
+                    "INSERT INTO projects
+                       (id, name, color, key_prefix, position, created_at, updated_at)
+                     VALUES ('project', 'Existing project', 'blue', 'EXI', 0, 11, 12);
+                     INSERT INTO boards
+                       (id, project_id, name, position, created_at, updated_at)
+                     VALUES ('board', 'project', 'Board', 0, 13, 14);
+                     INSERT INTO board_columns
+                       (id, board_id, name, position, created_at, updated_at)
+                     VALUES ('column', 'board', 'Todo', 0, 15, 16);
+                     INSERT INTO tasks
+                       (id, project_id, board_id, column_id, number, title,
+                        position, created_at, updated_at)
+                     VALUES
+                       ('task', 'project', 'board', 'column', 1, 'Existing task', 0, 17, 18);
+                     INSERT INTO notes
+                       (id, project_id, title, body, position, created_at, updated_at)
+                     VALUES
+                       ('note', 'project', 'Existing note', 'Must survive', 0, 19, 20);",
+                )
+                .expect("v4 rows");
+            assert!(!db.table_exists("note_task_links").expect("table check"));
+        }
+
+        let db = Database::open_with(&path, MIGRATIONS).expect("v5 upgrade");
+        assert_eq!(
+            current_version(db.connection()).expect("version"),
+            latest_version(MIGRATIONS)
+        );
+        let note: (String, String, i64, i64) = db
+            .connection()
+            .query_row(
+                "SELECT title, body, created_at, updated_at FROM notes WHERE id = 'note'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("old note");
+        assert_eq!(
+            note,
+            (
+                "Existing note".to_owned(),
+                "Must survive".to_owned(),
+                19,
+                20
+            )
+        );
+
+        db.connection()
+            .execute(
+                "INSERT INTO note_task_links (note_id, task_id, position, created_at) \
+                 VALUES ('note', 'task', 0, 21)",
+                [],
+            )
+            .expect("new relation is usable");
+        let stored: (i64, i64) = db
+            .connection()
+            .query_row(
+                "SELECT position, created_at FROM note_task_links",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("relation");
+        assert_eq!(stored, (0, 21));
+
+        db.connection()
+            .execute("DELETE FROM tasks WHERE id = 'task'", [])
+            .expect("task deletes");
+        let links: i64 = db
+            .connection()
+            .query_row("SELECT COUNT(*) FROM note_task_links", [], |row| row.get(0))
+            .expect("link count");
+        let notes: i64 = db
+            .connection()
+            .query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0))
+            .expect("note count");
+        assert_eq!(links, 0, "task deletion cascades only the relation");
+        assert_eq!(notes, 1, "the independently-owned note survives");
+
+        let violations: i64 = db
+            .connection()
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })
+            .expect("foreign key check");
+        assert_eq!(violations, 0);
     }
 
     #[test]

@@ -5,12 +5,14 @@
 //! stdin/stdout. Keeping this in the application binary means an installed app
 //! and its AI integration can never drift onto different database schemas.
 
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use rmcp::handler::server::tool::schema_for_output;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock};
+use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo};
 use rmcp::schemars::JsonSchema;
 use rmcp::{tool, tool_handler, tool_router, ServerHandler, ServiceExt};
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,7 @@ use crate::db::file_refs;
 use crate::db::labels::{self, Label, LabelInput};
 use crate::db::link_refs;
 use crate::db::mcp::{self, McpAccess, McpSettings};
+use crate::db::notes::{self, Note, NotePatch};
 use crate::db::projects::{self, NewProject, Project};
 use crate::db::search;
 use crate::db::subtasks::{self, SubtaskPatch};
@@ -29,22 +32,24 @@ use crate::db::tasks::{self, MoveResult, NewTask, TaskPatch};
 use crate::db::{Database, DATABASE_FILE_NAME};
 use crate::error::{AppError, AppResult};
 
-const WORKFLOW_GUIDE: &str = r#"Atticus is the user's source of truth for planned and active work.
+const WORKFLOW_GUIDE_VERSION: &str = "2026-08-03.2";
 
-Rules for using this server:
-1. MCP writes are confined to projects created through atticus_create_project and shown in the app's isolated AI Boards section. User-created projects, boards, columns, tasks, labels, files, and links are immutable through MCP. Never attempt to work around this boundary.
-2. Inspect before writing. Use atticus_list_workspace, atticus_get_board, atticus_search_tasks, or atticus_get_task to obtain real IDs. Never invent an ID. The mcpManaged field identifies the writable AI scope.
-3. Do not create a duplicate task when an existing AI-managed task represents the same work. Update the existing task instead.
-4. When you actually begin accepted work, move its task to in_progress with atticus_set_task_status. Do not mark a task in progress merely because you inspected it.
-5. Keep the task useful while working: update its description with decisions or outcomes, add concrete subtasks, and attach only relevant labels, links, and existing files.
-6. Mark a subtask done only after that subtask is complete. Move the parent task to done only after the requested work is implemented and appropriately verified. If work fails or remains incomplete, leave it in progress and record the blocker in the description.
-7. Status names are semantic conveniences. If a custom board has no matching status column, inspect the board and use atticus_move_task with an explicit column ID. Never guess the closest column.
-8. A newly created project or board already contains Backlog, Todo, In Progress, Review, and Done columns. Do not recreate those columns.
-9. Labels use one of these color tokens: slate, indigo, blue, cyan, teal, grass, amber, orange, red, plum. Reuse an existing label when its meaning already matches.
-10. Links must be complete http:// or https:// URLs. Never fabricate a URL or file path.
-11. File attachment only stores a reference; it never uploads or reads the file. Attachments must exist inside the task project's configured folder and require the user's separate file permission.
-12. Destructive operations are intentionally unavailable. Never work around that by editing the database or filesystem directly.
-13. After every mutation, use the returned object as the authoritative state. Report clearly what changed."#;
+const WORKFLOW_GUIDE: &str = r#"Atticus is a local task-and-note workspace, not an automatic activity logger. Do not create or change Atticus records merely because the tools are available. Mutate Atticus only when the user asks to track or manage work there, or when the request clearly concerns an existing Atticus task or project note.
+
+Operating contract:
+1. Start with atticus_connection_status when access is uncertain. If access is disabled, explain that the user can enable it in Settings → AI access and stop retrying. In read-only mode, inspect and report; do not repeatedly attempt writes.
+2. Inspect before acting. Use atticus_list_workspace, atticus_search_tasks, atticus_get_board, atticus_get_task, atticus_list_notes, atticus_search_notes, and atticus_get_note to obtain current state. Treat every database ID as opaque, never invent one, and never substitute a human reference such as ATT-42 where a task_id is required.
+3. MCP can write only to live tasks, descendants, and project notes inside projects created through atticus_create_project. These appear under AI Boards. User-created projects and all descendants, including notes, are read-only even when their IDs are known. Search and detail results expose writable explicitly. Never bypass this boundary through the database or filesystem.
+4. Reuse a suitable AI-managed project, board, task, note, and label when one exists. Before creating a task or note, search with distinctive terms; task search also accepts an exact reference. Create a new project only when the user intends a separate workspace. New projects and boards already contain Backlog, Todo, In Progress, Review, and Done.
+5. Read immediately before any replacement or patch. atticus_update_task and atticus_update_note require the object's current expected_updated_at. atticus_set_task_labels replaces the complete label set. A note update's task_ids, when supplied, likewise replaces the complete task association set; merge existing IDs first or use [] intentionally to clear them. If a conflict reports newer state, read again, reconcile, and retry only with the new timestamp.
+6. Omitted update fields remain unchanged. Task descriptions and note bodies are complete Markdown replacements. Do not send empty updates, a value together with its clear flag, duplicate label or task IDs, or a negative move index. Priority is 0 none, 1 low, 2 medium, 3 high, or 4 urgent; dates are YYYY-MM-DD; estimates are minutes.
+7. Use atticus_set_task_status for the standard semantic states. It appends to the matched destination column. If the board has no single unambiguous match, inspect it and call atticus_move_task with the exact column ID. WIP limits are advisory but should be respected unless the user directs otherwise.
+8. Move a task to in_progress only when accepted work actually begins. Keep its Markdown description, subtasks, labels, and verified references useful for the domain: software, research, writing, operations, or personal work. Use a project note for durable long-form context, plans, or decisions, and associate it only with relevant task IDs. Complete a subtask only when that item is complete. Move the parent to done only after the requested outcome and appropriate verification are complete; otherwise keep it active or in review and record the blocker.
+9. Add only relevant, verified URLs and file paths. Links must be complete http:// or https:// URLs. File tools store a reference only; they never read or upload contents. A file requires read/write access, separate attachment permission, a configured project folder, and an existing file inside that folder.
+10. Create and append tools are non-idempotent. If a call is interrupted or its outcome is unknown, inspect or search before retrying so you do not create duplicates. Validation, permission, and conflict failures are returned as structured tool errors; correct the stated field or re-read the suggested object rather than blindly repeating the call.
+11. MCP intentionally exposes no delete, archive, restore, or attachment-removal tools. Replacement, clearing, and moving tools can still overwrite state and are marked destructive. If a correction requires an unavailable operation, tell the user to make it in Atticus instead of working around the limit.
+12. Treat every successful mutation response as authoritative. Use its returned IDs, timestamps, and state for the next call. At the end, report the concrete records changed and any unresolved blocker.
+13. The server is passive. It performs calls during the current client session; it does not schedule work or continue after the client disconnects."#;
 
 #[derive(Clone)]
 pub struct AtticusMcp {
@@ -74,56 +79,110 @@ impl AtticusMcp {
             require_read_access(&settings)?;
             operation(&mut database)
         })();
-        tool_result(result)
+        read_tool_result(result)
     }
 
     fn write<T: Serialize>(
         &self,
         operation: impl FnOnce(&mut Database, &McpSettings) -> AppResult<T>,
     ) -> CallToolResult {
-        let result = (|| {
-            let mut database = self.database()?;
-            let settings = mcp::settings(database.connection())?;
-            require_write_access(&settings)?;
-            let value = operation(&mut database, &settings)?;
-            mcp::record_external_change(database.connection())?;
+        let result: Result<T, (AppError, bool)> = (|| {
+            let mut database = self.database().map_err(|error| (error, false))?;
+            let settings = mcp::settings(database.connection()).map_err(|error| (error, false))?;
+            require_write_access(&settings).map_err(|error| (error, false))?;
+            let value = operation(&mut database, &settings).map_err(|error| {
+                let may_have_committed = error_may_follow_mutation(&error);
+                (error, may_have_committed)
+            })?;
+            mcp::record_external_change(database.connection()).map_err(|error| (error, true))?;
             Ok(value)
         })();
-        tool_result(result)
+        write_tool_result(result)
+    }
+
+    fn write_if_changed<T: Serialize>(
+        &self,
+        operation: impl FnOnce(&mut Database, &McpSettings) -> AppResult<(T, bool)>,
+    ) -> CallToolResult {
+        let result: Result<T, (AppError, bool)> = (|| {
+            let mut database = self.database().map_err(|error| (error, false))?;
+            let settings = mcp::settings(database.connection()).map_err(|error| (error, false))?;
+            require_write_access(&settings).map_err(|error| (error, false))?;
+            let (value, changed) = operation(&mut database, &settings).map_err(|error| {
+                let may_have_committed = error_may_follow_mutation(&error);
+                (error, may_have_committed)
+            })?;
+            if changed {
+                mcp::record_external_change(database.connection())
+                    .map_err(|error| (error, true))?;
+            }
+            Ok(value)
+        })();
+        write_tool_result(result)
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct ConnectionStatus {
     access: McpAccess,
     allow_file_attachments: bool,
-    database_path: Option<String>,
     workflow_instructions_attached: bool,
+    workflow_guide_version: &'static str,
+    server_version: &'static str,
     write_scope: &'static str,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct WorkflowGuide {
+    version: &'static str,
+    instructions: &'static str,
+}
+
+/// The advertised output contract covers both successful data and the
+/// structured execution-error envelope. Strict MCP clients can therefore
+/// validate every `structuredContent` value, including `isError: true` results.
+#[allow(dead_code)]
+#[derive(Debug, JsonSchema)]
+#[serde(untagged)]
+enum McpToolOutput<T> {
+    Success(T),
+    Error(McpToolErrorOutput),
+}
+
+#[allow(dead_code)]
+#[derive(Debug, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct McpToolErrorOutput {
+    error: serde_json::Value,
+    message: String,
+    retryable_with_same_arguments: bool,
+    mutation_may_have_committed: bool,
+    recovery: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct WorkspaceOverview {
     projects: Vec<ProjectOverview>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct ProjectOverview {
     project: Project,
     boards: Vec<BoardOverview>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct BoardOverview {
     board: Board,
     columns: Vec<Column>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct CreatedProject {
     project: Project,
@@ -131,16 +190,31 @@ struct CreatedProject {
     columns: Vec<Column>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct CreatedBoard {
     board: Board,
     columns: Vec<Column>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct BoardDetail {
+    project: Project,
+    board: Board,
+    writable: bool,
+    snapshot: board_view::BoardSnapshot,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct TaskDetail {
+    task_reference: String,
+    project_name: String,
+    board_name: String,
+    column_name: String,
+    mcp_managed: bool,
+    writable: bool,
     task: crate::db::tasks::Task,
     subtasks: Vec<crate::db::subtasks::Subtask>,
     label_ids: Vec<String>,
@@ -149,7 +223,54 @@ struct TaskDetail {
     link_refs: Vec<crate::db::link_refs::LinkRef>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct NoteSummary {
+    id: String,
+    title: String,
+    task_ids: Vec<String>,
+    position: i64,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct NoteList {
+    project_id: String,
+    project_name: String,
+    project_key_prefix: String,
+    mcp_managed: bool,
+    writable: bool,
+    notes: Vec<NoteSummary>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct NoteDetail {
+    project_name: String,
+    project_key_prefix: String,
+    mcp_managed: bool,
+    writable: bool,
+    note: Note,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+struct NoteSearchResult {
+    note_id: String,
+    project_id: String,
+    project_name: String,
+    project_key_prefix: String,
+    title: String,
+    excerpt: String,
+    updated_at: i64,
+    task_ids: Vec<String>,
+    mcp_managed: bool,
+    writable: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct StatusMove {
     requested_status: WorkflowStatus,
@@ -158,92 +279,197 @@ struct StatusMove {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct GetBoardArgs {
     /// Board ID returned by atticus_list_workspace or atticus_search_tasks.
     board_id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct GetTaskArgs {
     /// Task ID returned by a board, search, or mutation result.
     task_id: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SearchTasksArgs {
-    /// Words from the title or description. The final word is prefix matched.
+    /// Exact task reference (for example ATT-42), or words from the title or
+    /// description. All words must match and the final word is prefix matched.
+    #[schemars(length(min = 1, max = 500))]
     query: String,
     /// Maximum results, from 1 to 100. Defaults to 25.
+    #[schemars(range(min = 1, max = 100))]
     limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ListNotesArgs {
+    /// Project ID returned by atticus_list_workspace or a project mutation.
+    project_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GetNoteArgs {
+    /// Note ID returned by note list, search, create, or update output.
+    note_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SearchNotesArgs {
+    /// Words from a note title or Markdown body, 1-500 characters.
+    #[schemars(length(min = 1, max = 500))]
+    query: String,
+    /// Optional exact project ID. Omit to search notes across the workspace.
+    project_id: Option<String>,
+    /// Maximum results, from 1 to 100. Defaults to 50.
+    #[schemars(range(min = 1, max = 100))]
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct CreateNoteArgs {
+    /// Active MCP-managed project that will own the note.
+    project_id: String,
+    /// Note title, 1-200 characters.
+    #[schemars(length(min = 1, max = 200))]
+    title: String,
+    /// Optional complete Markdown body, at most 200,000 characters. Defaults to empty.
+    #[schemars(length(max = 200000))]
+    body: Option<String>,
+    /// Complete unique task association set. Every task must belong to project_id;
+    /// omit or use [] for no task associations.
+    #[serde(default)]
+    task_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct UpdateNoteArgs {
+    /// Writable note ID returned by note list, search, get, create, or update output.
+    note_id: String,
+    /// Current note.updatedAt from atticus_get_note. Rejects stale updates.
+    #[schemars(range(min = 0))]
+    expected_updated_at: i64,
+    /// Replacement title, 1-200 characters. Omit to leave unchanged.
+    #[schemars(length(min = 1, max = 200))]
+    title: Option<String>,
+    /// Complete replacement Markdown body, at most 200,000 characters. Omit to leave unchanged.
+    #[schemars(length(max = 200000))]
+    body: Option<String>,
+    /// Complete unique replacement task association set. Omit to preserve current
+    /// associations; use [] intentionally to clear them all.
+    task_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct CreateProjectArgs {
+    /// Project name, 1-100 characters.
+    #[schemars(length(min = 1, max = 100))]
     name: String,
-    /// Optional short explanation of what belongs in the project.
+    /// Optional explanation of what belongs in the project, at most 2,000 characters.
+    #[schemars(length(max = 2000))]
     description: Option<String>,
-    /// Atticus color token. Defaults to blue.
-    color: Option<String>,
+    /// Atticus color token. Defaults to blue when omitted.
+    color: Option<ColorToken>,
     /// Optional 2-5 letter task prefix; derived from the name when omitted.
+    #[schemars(regex(pattern = r"^[A-Za-z]{2,5}$"))]
     key_prefix: Option<String>,
-    /// Optional absolute folder associated with the project.
+    /// Optional absolute folder associated with the project. Only provide a
+    /// user-confirmed path; file references cannot be added until it is usable.
     directory_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct CreateBoardArgs {
-    /// Existing project ID.
+    /// Writable project ID returned by atticus_list_workspace or atticus_create_project.
     project_id: String,
+    /// Board name, 1-100 characters.
+    #[schemars(length(min = 1, max = 100))]
     name: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct CreateColumnArgs {
-    /// Existing board ID.
+    /// Writable board ID returned by atticus_list_workspace or atticus_create_board.
     board_id: String,
+    /// Column name, 1-60 characters. Standard columns already exist on new boards.
+    #[schemars(length(min = 1, max = 60))]
     name: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct CreateTaskArgs {
-    /// Destination column ID. Inspect the board first.
+    /// Writable destination column ID returned by atticus_get_board or a create result.
     column_id: String,
+    /// Task title, 1-500 characters.
+    #[schemars(length(min = 1, max = 500))]
     title: String,
-    /// Optional markdown description to save immediately after creation.
+    /// Optional Markdown description, at most 100,000 characters.
+    #[schemars(length(max = 100000))]
     description: Option<String>,
     /// 0 none, 1 low, 2 medium, 3 high, 4 urgent.
+    #[schemars(range(min = 0, max = 4))]
     priority: Option<i64>,
     /// Optional YYYY-MM-DD calendar date.
+    #[schemars(regex(pattern = r"^\d{4}-\d{2}-\d{2}$"))]
     due_date: Option<String>,
-    /// Optional positive estimate, in minutes.
+    /// Optional estimate in minutes, from 1 to 20,160 (two weeks).
+    #[schemars(range(min = 1, max = 20160))]
     estimate_minutes: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct UpdateTaskArgs {
+    /// Writable task ID returned by search, board, task, or mutation output.
     task_id: String,
+    /// Current task.updatedAt from atticus_get_task. The update is rejected if
+    /// the task changed after it was read.
+    #[schemars(range(min = 0))]
+    expected_updated_at: i64,
+    /// New title, 1-500 characters. Omit to leave unchanged.
+    #[schemars(length(min = 1, max = 500))]
     title: Option<String>,
     /// Complete replacement markdown description. Read the task first so useful
     /// existing context is not accidentally erased.
+    #[schemars(length(max = 100000))]
     description: Option<String>,
     /// 0 none, 1 low, 2 medium, 3 high, 4 urgent.
+    #[schemars(range(min = 0, max = 4))]
     priority: Option<i64>,
-    /// YYYY-MM-DD. Use clear_due_date instead when removing it.
+    /// YYYY-MM-DD. Mutually exclusive with clear_due_date.
+    #[schemars(regex(pattern = r"^\d{4}-\d{2}-\d{2}$"))]
     due_date: Option<String>,
+    /// Set true to remove the due date. Mutually exclusive with due_date.
     #[serde(default)]
     clear_due_date: bool,
-    /// Positive estimate in minutes. Use clear_estimate instead when removing it.
+    /// Estimate in minutes, from 1 to 20,160. Mutually exclusive with clear_estimate.
+    #[schemars(range(min = 1, max = 20160))]
     estimate_minutes: Option<i64>,
+    /// Set true to remove the estimate. Mutually exclusive with estimate_minutes.
     #[serde(default)]
     clear_estimate: bool,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct MoveTaskArgs {
+    /// Writable live task ID returned by search, board, task, or mutation output.
     task_id: String,
-    /// Destination column ID on the task's current board.
+    /// Writable destination column ID on the task's current board.
     column_id: String,
     /// Zero-based position. Omit to append to the column.
+    #[schemars(range(min = 0))]
     index: Option<i64>,
 }
 
@@ -257,58 +483,260 @@ enum WorkflowStatus {
     Done,
 }
 
+impl WorkflowStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Backlog => "backlog",
+            Self::Todo => "todo",
+            Self::InProgress => "in_progress",
+            Self::Review => "review",
+            Self::Done => "done",
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SetTaskStatusArgs {
+    /// Writable live task ID returned by search, board, task, or mutation output.
     task_id: String,
+    /// Standard semantic destination. The task is appended to the unique matching column.
     status: WorkflowStatus,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct AddSubtaskArgs {
+    /// Writable live task ID returned by atticus_get_task or another task result.
     task_id: String,
+    /// Checklist item title, 1-300 characters.
+    #[schemars(length(min = 1, max = 300))]
     title: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct UpdateSubtaskArgs {
+    /// Subtask ID returned inside atticus_get_task.
     subtask_id: String,
+    /// Current subtask.updatedAt from atticus_get_task. Rejects stale updates.
+    #[schemars(range(min = 0))]
+    expected_updated_at: i64,
+    /// Replacement title, 1-300 characters. Omit to leave unchanged.
+    #[schemars(length(min = 1, max = 300))]
     title: Option<String>,
+    /// Completion state. Omit to leave unchanged.
     done: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct CreateLabelArgs {
+    /// Writable project ID returned by atticus_list_workspace or a create result.
     project_id: String,
+    /// Label name, 1-40 characters. Reuse an existing same-purpose label.
+    #[schemars(length(min = 1, max = 40))]
     name: String,
-    /// One of slate, indigo, blue, cyan, teal, grass, amber, orange, red, plum.
-    color: String,
+    /// Atticus label color token.
+    color: ColorToken,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SetTaskLabelsArgs {
+    /// Writable live task ID returned by atticus_get_task or another task result.
     task_id: String,
-    /// Complete replacement list of existing label IDs. Use [] to clear labels.
+    /// Current task.updatedAt from atticus_get_task. Rejects stale replacements.
+    #[schemars(range(min = 0))]
+    expected_updated_at: i64,
+    /// Complete unique replacement list of label IDs from the same project.
+    /// Merge with current labelIds first; use [] intentionally to clear all.
     label_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct AddFileArgs {
+    /// Writable live task ID returned by atticus_get_task or another task result.
     task_id: String,
-    /// Absolute path to an existing file inside the task project's configured folder.
+    /// User-verified absolute path to an existing regular file inside the task
+    /// project's configured folder. The server stores only a reference.
     path: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct AddLinkArgs {
+    /// Writable live task ID returned by atticus_get_task or another task result.
     task_id: String,
     /// Complete http:// or https:// URL.
+    #[schemars(url, length(min = 1, max = 2048))]
     url: String,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum ColorToken {
+    Slate,
+    Indigo,
+    Blue,
+    Cyan,
+    Teal,
+    Grass,
+    Amber,
+    Orange,
+    Red,
+    Plum,
+}
+
+impl ColorToken {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Slate => "slate",
+            Self::Indigo => "indigo",
+            Self::Blue => "blue",
+            Self::Cyan => "cyan",
+            Self::Teal => "teal",
+            Self::Grass => "grass",
+            Self::Amber => "amber",
+            Self::Orange => "orange",
+            Self::Red => "red",
+            Self::Plum => "plum",
+        }
+    }
+}
+
+impl SearchTasksArgs {
+    fn validate(&self) -> AppResult<()> {
+        crate::domain::validate::required_text("query", &self.query, 500)?;
+        if self.limit.is_some_and(|limit| !(1..=100).contains(&limit)) {
+            return Err(AppError::validation(
+                "limit",
+                "Choose a result limit from 1 to 100.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl SearchNotesArgs {
+    fn validate(&self) -> AppResult<()> {
+        crate::domain::validate::required_text("query", &self.query, 500)?;
+        if self.limit.is_some_and(|limit| !(1..=100).contains(&limit)) {
+            return Err(AppError::validation(
+                "limit",
+                "Choose a result limit from 1 to 100.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl CreateNoteArgs {
+    fn validate(&self) -> AppResult<()> {
+        validate_unique_ids("task_ids", &self.task_ids)
+    }
+}
+
+impl UpdateNoteArgs {
+    fn validate(&self) -> AppResult<()> {
+        if self.title.is_none() && self.body.is_none() && self.task_ids.is_none() {
+            return Err(AppError::validation(
+                "update",
+                "Provide title, body, task_ids, or a combination of those fields.",
+            ));
+        }
+        if let Some(task_ids) = &self.task_ids {
+            validate_unique_ids("task_ids", task_ids)?;
+        }
+        Ok(())
+    }
+}
+
+impl UpdateTaskArgs {
+    fn validate(&self) -> AppResult<()> {
+        if self.title.is_none()
+            && self.description.is_none()
+            && self.priority.is_none()
+            && self.due_date.is_none()
+            && !self.clear_due_date
+            && self.estimate_minutes.is_none()
+            && !self.clear_estimate
+        {
+            return Err(AppError::validation(
+                "update",
+                "Provide at least one task field to change.",
+            ));
+        }
+        if self.due_date.is_some() && self.clear_due_date {
+            return Err(AppError::validation(
+                "due_date",
+                "Provide due_date or clear_due_date, not both.",
+            ));
+        }
+        if self.estimate_minutes.is_some() && self.clear_estimate {
+            return Err(AppError::validation(
+                "estimate_minutes",
+                "Provide estimate_minutes or clear_estimate, not both.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl MoveTaskArgs {
+    fn validate(&self) -> AppResult<()> {
+        if self.index.is_some_and(|index| index < 0) {
+            return Err(AppError::validation(
+                "index",
+                "Use a zero-based index or omit index to append.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl UpdateSubtaskArgs {
+    fn validate(&self) -> AppResult<()> {
+        if self.title.is_none() && self.done.is_none() {
+            return Err(AppError::validation(
+                "update",
+                "Provide title, done, or both.",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl SetTaskLabelsArgs {
+    fn validate(&self) -> AppResult<()> {
+        validate_unique_ids("label_ids", &self.label_ids)
+    }
+}
+
+fn validate_unique_ids(field: &str, ids: &[String]) -> AppResult<()> {
+    let unique: HashSet<&str> = ids.iter().map(String::as_str).collect();
+    if unique.len() != ids.len() {
+        return Err(AppError::validation(
+            field,
+            format!("{field} must contain unique IDs; each ID may appear only once."),
+        ));
+    }
+    Ok(())
 }
 
 #[tool_router]
 impl AtticusMcp {
     #[tool(
-        description = "Show whether Atticus MCP is disabled, read-only, or read/write and whether file attachment is enabled. This diagnostic is available even while access is disabled."
+        title = "Check Atticus access",
+        description = "Read the current MCP access mode, file-reference permission, server version, workflow-guide version, and write boundary. This diagnostic remains callable while access is disabled; call it first when permissions are uncertain.",
+        output_schema = schema_for_output::<McpToolOutput<ConnectionStatus>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn atticus_connection_status(&self) -> CallToolResult {
         let result = (|| {
@@ -317,62 +745,224 @@ impl AtticusMcp {
             Ok(ConnectionStatus {
                 access: settings.access,
                 allow_file_attachments: settings.allow_file_attachments,
-                database_path: database
-                    .path()
-                    .map(|path| path.to_string_lossy().into_owned()),
                 workflow_instructions_attached: true,
-                write_scope: "AI-managed projects only",
+                workflow_guide_version: WORKFLOW_GUIDE_VERSION,
+                server_version: env!("CARGO_PKG_VERSION"),
+                write_scope: "live tasks and their descendants, plus project notes, inside active MCP-created projects only",
             })
         })();
-        tool_result(result)
+        read_tool_result(result)
     }
 
     #[tool(
-        description = "Return the complete Atticus AI workflow guide. The same rules are attached to the MCP initialization instructions so clients receive them automatically."
+        title = "Read the Atticus workflow guide",
+        description = "Return the canonical operating contract for connected models, including authorization, discovery, write scope, update semantics, lifecycle, retry recovery, and unavailable operations. The identical guide is attached during MCP initialization.",
+        output_schema = schema_for_output::<McpToolOutput<WorkflowGuide>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
-    fn atticus_workflow_guide(&self) -> String {
-        WORKFLOW_GUIDE.to_owned()
+    fn atticus_workflow_guide(&self) -> CallToolResult {
+        read_tool_result(Ok(WorkflowGuide {
+            version: WORKFLOW_GUIDE_VERSION,
+            instructions: WORKFLOW_GUIDE,
+        }))
     }
 
     #[tool(
-        description = "List all active projects with their boards and ordered columns. Call this before creating or moving work so you use real IDs and do not duplicate the default workflow."
+        title = "List the Atticus workspace",
+        description = "Read all active projects with their boards and ordered columns. Project.mcpManaged is the ownership boundary: only true projects are MCP-writable. Use returned opaque IDs; new boards already have the five standard columns.",
+        output_schema = schema_for_output::<McpToolOutput<WorkspaceOverview>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn atticus_list_workspace(&self) -> CallToolResult {
         self.read(|database| workspace_overview(database.connection()))
     }
 
     #[tool(
-        description = "Load one board with its columns, live tasks, labels, subtask counts, and archived count."
+        title = "Get an Atticus board",
+        description = "Read one board, its project and writable state, ordered columns, live tasks, labels, subtask counts, and archived-task count. Use this before moving work; IDs are opaque and WIP limits are advisory.",
+        output_schema = schema_for_output::<McpToolOutput<BoardDetail>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn atticus_get_board(&self, Parameters(args): Parameters<GetBoardArgs>) -> CallToolResult {
-        self.read(|database| board_view::load(database.connection(), &args.board_id))
+        self.read(|database| board_detail(database.connection(), &args.board_id))
     }
 
     #[tool(
-        description = "Load a task and everything shown in focus mode: description, subtasks, assigned and available labels, file references, and links."
+        title = "Get an Atticus task",
+        description = "Read a task's human reference, location names, writable state, Markdown description, timestamps, subtasks, assigned and available labels, file references, and links. Read immediately before update or label replacement and pass back the current updatedAt value.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn atticus_get_task(&self, Parameters(args): Parameters<GetTaskArgs>) -> CallToolResult {
         self.read(|database| task_detail(database.connection(), &args.task_id))
     }
 
     #[tool(
-        description = "Search live and archived tasks by title or description. Use this before creating a task when similar work may already exist."
+        title = "Search Atticus tasks",
+        description = "Search active-project tasks globally by an exact human reference such as ATT-42, or by title/description words. All words must match and only the final word is prefix-matched. Results can include archived or user-owned tasks; writable is authoritative. Search before creating work, and never mutate an archived result.",
+        output_schema = schema_for_output::<McpToolOutput<Vec<search::SearchHit>>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn atticus_search_tasks(
         &self,
         Parameters(args): Parameters<SearchTasksArgs>,
     ) -> CallToolResult {
         self.read(|database| {
-            search::search(
-                database.connection(),
-                &args.query,
-                args.limit.unwrap_or(25).clamp(1, 100),
-            )
+            args.validate()?;
+            search::search(database.connection(), &args.query, args.limit.unwrap_or(25))
         })
     }
 
     #[tool(
-        description = "Create an isolated AI-managed project shown under AI Boards. It automatically includes an initial Board with Backlog, Todo, In Progress, Review, and Done columns. This is the only way MCP can establish writable scope. Requires read/write access."
+        title = "List Atticus project notes",
+        description = "List note summaries for one project in display order without returning their potentially large Markdown bodies. The project context includes the authoritative MCP ownership and writable state; use atticus_get_note for content before editing.",
+        output_schema = schema_for_output::<McpToolOutput<NoteList>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn atticus_list_notes(&self, Parameters(args): Parameters<ListNotesArgs>) -> CallToolResult {
+        self.read(|database| note_list(database.connection(), &args.project_id))
+    }
+
+    #[tool(
+        title = "Get an Atticus note",
+        description = "Read one project note's complete Markdown body, task associations, timestamps, project context, and authoritative writable state. Read immediately before updating and pass the current note.updatedAt as expected_updated_at.",
+        output_schema = schema_for_output::<McpToolOutput<NoteDetail>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn atticus_get_note(&self, Parameters(args): Parameters<GetNoteArgs>) -> CallToolResult {
+        self.read(|database| note_detail(database.connection(), &args.note_id))
+    }
+
+    #[tool(
+        title = "Search Atticus project notes",
+        description = "Search note titles and Markdown bodies across the workspace, or within one exact project ID. All parsed words must match and the final word is prefix-matched. Results return bounded excerpts plus authoritative ownership and writable state. Search before creating a similar note.",
+        output_schema = schema_for_output::<McpToolOutput<Vec<NoteSearchResult>>>(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn atticus_search_notes(
+        &self,
+        Parameters(args): Parameters<SearchNotesArgs>,
+    ) -> CallToolResult {
+        self.read(|database| {
+            args.validate()?;
+            if let Some(project_id) = &args.project_id {
+                projects::find(database.connection(), project_id)?;
+            }
+            let hits = notes::search(
+                database.connection(),
+                &args.query,
+                args.project_id.as_deref(),
+                args.limit.unwrap_or(50),
+            )?;
+            note_search_results(database.connection(), hits)
+        })
+    }
+
+    #[tool(
+        title = "Create an Atticus project note",
+        description = "Create a note in an active MCP-managed project with an optional complete Markdown body and complete unique task association set. Every task ID must belong to that project; omission or [] means no associations. Search first because this call is non-idempotent. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<NoteDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    fn atticus_create_note(&self, Parameters(args): Parameters<CreateNoteArgs>) -> CallToolResult {
+        self.write(|database, _settings| {
+            args.validate()?;
+            mcp::require_active_managed_project(database.connection(), &args.project_id)?;
+            let note = notes::create(
+                database.connection_mut(),
+                &args.project_id,
+                &args.title,
+                args.body.as_deref().unwrap_or_default(),
+                &args.task_ids,
+            )?;
+            note_detail(database.connection(), &note.id)
+        })
+    }
+
+    #[tool(
+        title = "Update an Atticus project note",
+        description = "Patch a note in an active MCP-managed project using optimistic concurrency. Title and body replace their fields; task_ids, when supplied, replaces the complete unique association set and [] clears it. Omitted fields remain unchanged. Read first and pass note.updatedAt as expected_updated_at. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<NoteDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    fn atticus_update_note(&self, Parameters(args): Parameters<UpdateNoteArgs>) -> CallToolResult {
+        self.write(|database, _settings| {
+            args.validate()?;
+            mcp::require_active_managed_note(database.connection(), &args.note_id)?;
+            let note = notes::update_if_current(
+                database.connection_mut(),
+                &args.note_id,
+                args.expected_updated_at,
+                &NotePatch {
+                    title: args.title,
+                    body: args.body,
+                    task_ids: args.task_ids,
+                },
+            )?;
+            note_detail(database.connection(), &note.id)
+        })
+    }
+
+    #[tool(
+        title = "Create an AI-managed project",
+        description = "Create a new MCP-writable project under AI Boards plus one Board containing Backlog, Todo, In Progress, Review, and Done. Use only with user intent after listing the workspace; this non-idempotent call establishes new write scope and MCP cannot delete it. If the outcome is unknown, inspect before retrying. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<CreatedProject>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
     )]
     fn atticus_create_project(
         &self,
@@ -384,7 +974,11 @@ impl AtticusMcp {
                 NewProject {
                     name: args.name,
                     description: args.description.unwrap_or_default(),
-                    color: args.color.unwrap_or_else(|| "blue".to_owned()),
+                    color: args
+                        .color
+                        .map(ColorToken::as_str)
+                        .unwrap_or("blue")
+                        .to_owned(),
                     key_prefix: args.key_prefix,
                     directory_path: args.directory_path,
                 },
@@ -400,14 +994,22 @@ impl AtticusMcp {
     }
 
     #[tool(
-        description = "Create a board inside an AI-managed project. User projects are immutable through MCP. The board automatically receives Backlog, Todo, In Progress, Review, and Done columns. Requires read/write access."
+        title = "Create an Atticus board",
+        description = "Create a board inside an active MCP-managed project and return its Backlog, Todo, In Progress, Review, and Done columns. This non-idempotent additive call cannot be removed through MCP; inspect the project first and inspect again before retrying an unknown result. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<CreatedBoard>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_create_board(
         &self,
         Parameters(args): Parameters<CreateBoardArgs>,
     ) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_project(database.connection(), &args.project_id)?;
+            mcp::require_active_managed_project(database.connection(), &args.project_id)?;
             let board = boards::create(database.connection_mut(), &args.project_id, &args.name)?;
             let columns = columns::list(database.connection(), &board.id)?;
             Ok(CreatedBoard { board, columns })
@@ -415,24 +1017,40 @@ impl AtticusMcp {
     }
 
     #[tool(
-        description = "Append a custom column to an AI-managed board. User boards are immutable. Inspect first; new boards already have the five standard workflow columns. Requires read/write access."
+        title = "Create an Atticus column",
+        description = "Append a custom column to an active MCP-managed board. New boards already contain five standard workflow columns. This non-idempotent addition cannot be removed through MCP; inspect before creating or retrying. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<Column>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_create_column(
         &self,
         Parameters(args): Parameters<CreateColumnArgs>,
     ) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_board(database.connection(), &args.board_id)?;
+            mcp::require_active_managed_board(database.connection(), &args.board_id)?;
             columns::create(database.connection_mut(), &args.board_id, &args.name)
         })
     }
 
     #[tool(
-        description = "Create a task at the end of a column inside AI Boards and optionally set its focus-mode fields. User columns are immutable. Search first when duplicate work may exist. Requires read/write access."
+        title = "Create an Atticus task",
+        description = "Append a task to a column on an active MCP-managed board, optionally with Markdown description, priority, due date, and estimate. Search first to avoid duplicates. This call is non-idempotent; after an unknown result, search or inspect before retrying. Returns full authoritative task detail. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_create_task(&self, Parameters(args): Parameters<CreateTaskArgs>) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_column(database.connection(), &args.column_id)?;
+            mcp::require_active_managed_column(database.connection(), &args.column_id)?;
             let task = tasks::create_with_details(
                 database.connection_mut(),
                 NewTask {
@@ -452,12 +1070,21 @@ impl AtticusMcp {
     }
 
     #[tool(
-        description = "Update an AI-managed task's focus-mode fields. User tasks are immutable. Description is a complete replacement, so read first and preserve useful context. Requires read/write access."
+        title = "Update an Atticus task",
+        description = "Patch title, Markdown description, priority, due date, or estimate on a live MCP-managed task. Omitted fields stay unchanged; description is a complete replacement. Read first and pass its current updatedAt as expected_updated_at. Empty, stale, or contradictory updates are rejected. This may overwrite or clear state and is non-idempotent. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_update_task(&self, Parameters(args): Parameters<UpdateTaskArgs>) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_task(database.connection(), &args.task_id)?;
-            tasks::update(
+            args.validate()?;
+            mcp::require_live_managed_task(database.connection(), &args.task_id)?;
+            tasks::update_if_current(
                 database.connection(),
                 &args.task_id,
                 TaskPatch {
@@ -469,36 +1096,56 @@ impl AtticusMcp {
                     estimate_minutes: args.estimate_minutes,
                     clear_estimate: args.clear_estimate.then_some(true),
                 },
+                args.expected_updated_at,
             )?;
             task_detail(database.connection(), &args.task_id)
         })
     }
 
     #[tool(
-        description = "Move an AI-managed task to an explicit AI-managed column and optional zero-based index. User tasks and columns are immutable. Omit index to append. Requires read/write access."
+        title = "Move an Atticus task",
+        description = "Move a live MCP-managed task to an explicit column on its current board and optionally a zero-based position; omit index to append. Both IDs must be writable and the move can reorder two columns. Inspect the board first. Repeating the identical final placement has no additional effect. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<MoveResult>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn atticus_move_task(&self, Parameters(args): Parameters<MoveTaskArgs>) -> CallToolResult {
-        self.write(|database, _settings| {
-            mcp::require_managed_task(database.connection(), &args.task_id)?;
-            mcp::require_managed_column(database.connection(), &args.column_id)?;
-            tasks::move_to(
+        self.write_if_changed(|database, _settings| {
+            args.validate()?;
+            mcp::require_live_managed_task(database.connection(), &args.task_id)?;
+            mcp::require_active_managed_column(database.connection(), &args.column_id)?;
+            let result = tasks::move_to(
                 database.connection_mut(),
                 &args.task_id,
                 &args.column_id,
                 args.index.unwrap_or(i64::MAX),
-            )
+            )?;
+            let changed = result.changed;
+            Ok((result, changed))
         })
     }
 
     #[tool(
-        description = "Move a task to a semantic Backlog, Todo, In Progress, Review, or Done column. The board must contain an unambiguous matching column; otherwise inspect it and use atticus_move_task. Requires read/write access."
+        title = "Set Atticus task status",
+        description = "Append a live MCP-managed task to the board's unique semantic Backlog, Todo, In Progress, Review, or Done column. If no single column matches, the error lists candidates; inspect the board and use atticus_move_task instead of guessing. This changes task state and the MCP revision. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<StatusMove>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     fn atticus_set_task_status(
         &self,
         Parameters(args): Parameters<SetTaskStatusArgs>,
     ) -> CallToolResult {
-        self.write(|database, _settings| {
-            mcp::require_managed_task(database.connection(), &args.task_id)?;
+        self.write_if_changed(|database, _settings| {
+            mcp::require_live_managed_task(database.connection(), &args.task_id)?;
             let task = tasks::find(database.connection(), &args.task_id)?;
             let board_columns = columns::list(database.connection(), &task.board_id)?;
             let destination = resolve_status_column(&board_columns, args.status)?;
@@ -508,87 +1155,138 @@ impl AtticusMcp {
                 &destination.id,
                 i64::MAX,
             )?;
-            Ok(StatusMove {
-                requested_status: args.status,
-                destination,
-                result,
-            })
+            let changed = result.changed;
+            Ok((
+                StatusMove {
+                    requested_status: args.status,
+                    destination,
+                    result,
+                },
+                changed,
+            ))
         })
     }
 
     #[tool(
-        description = "Append a concrete checklist item to an AI-managed task. User tasks are immutable. Adding a subtask does not complete or move its parent. Requires read/write access."
+        title = "Add an Atticus subtask",
+        description = "Append a checklist item to a live MCP-managed task and return refreshed task detail. It does not complete or move the parent. This non-idempotent addition cannot be removed through MCP; after an unknown result, read the task before retrying. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_add_subtask(&self, Parameters(args): Parameters<AddSubtaskArgs>) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_task(database.connection(), &args.task_id)?;
+            mcp::require_live_managed_task(database.connection(), &args.task_id)?;
             subtasks::create(database.connection_mut(), &args.task_id, &args.title)?;
             task_detail(database.connection(), &args.task_id)
         })
     }
 
     #[tool(
-        description = "Rename or complete a subtask inside AI Boards. User subtasks are immutable. Mark done only after the item is actually complete. Requires read/write access."
+        title = "Update an Atticus subtask",
+        description = "Patch the title and/or completion state of a subtask on a live MCP-managed task. Read its parent first and pass the subtask's current updatedAt as expected_updated_at. Empty and stale updates are rejected. Mark done only after completion. This can overwrite state and changes timestamps. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_update_subtask(
         &self,
         Parameters(args): Parameters<UpdateSubtaskArgs>,
     ) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_subtask(database.connection(), &args.subtask_id)?;
-            let existing = subtasks::find(database.connection(), &args.subtask_id)?;
-            subtasks::update(
-                database.connection(),
+            args.validate()?;
+            mcp::require_live_managed_subtask(database.connection(), &args.subtask_id)?;
+            let updated = subtasks::update_if_current(
+                database.connection_mut(),
                 &args.subtask_id,
                 SubtaskPatch {
                     title: args.title,
                     done: args.done,
                 },
+                args.expected_updated_at,
             )?;
-            task_detail(database.connection(), &existing.task_id)
+            task_detail(database.connection(), &updated.task_id)
         })
     }
 
     #[tool(
-        description = "Create a reusable label inside an AI-managed project. User projects are immutable. Reuse an existing label when its meaning already matches. Requires read/write access."
+        title = "Create an Atticus label",
+        description = "Create a reusable label in an active MCP-managed project. Reuse an existing same-purpose label; duplicate names are rejected. This non-idempotent addition cannot be deleted through MCP, so inspect before retrying an unknown result. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<Label>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_create_label(
         &self,
         Parameters(args): Parameters<CreateLabelArgs>,
     ) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_project(database.connection(), &args.project_id)?;
+            mcp::require_active_managed_project(database.connection(), &args.project_id)?;
             labels::create(
                 database.connection(),
                 &args.project_id,
                 LabelInput {
                     name: args.name,
-                    color: args.color,
+                    color: args.color.as_str().to_owned(),
                 },
             )
         })
     }
 
     #[tool(
-        description = "Replace an AI-managed task's labels with IDs from the same AI project. User tasks are immutable. Read first; this is replacement, not addition. Requires read/write access."
+        title = "Replace Atticus task labels",
+        description = "Replace the complete label set of a live MCP-managed task with unique label IDs from its project. Read first, merge current labelIds with the intended change, and pass task.updatedAt as expected_updated_at; [] intentionally clears all labels. Stale and duplicate input is rejected. This is destructive replacement, not addition. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_set_task_labels(
         &self,
         Parameters(args): Parameters<SetTaskLabelsArgs>,
     ) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_task(database.connection(), &args.task_id)?;
-            labels::set_for_task(database.connection_mut(), &args.task_id, &args.label_ids)?;
+            args.validate()?;
+            mcp::require_live_managed_task(database.connection(), &args.task_id)?;
+            labels::set_for_task_if_current(
+                database.connection_mut(),
+                &args.task_id,
+                &args.label_ids,
+                args.expected_updated_at,
+            )?;
             task_detail(database.connection(), &args.task_id)
         })
     }
 
     #[tool(
-        description = "Attach a reference to an existing file inside the task project's configured folder. This never reads or uploads file contents and requires both read/write access and the separate file-attachment permission."
+        title = "Add an Atticus file reference",
+        description = "Append a path reference to a live MCP-managed task. The server never reads or uploads contents. Requires read/write access, separate file permission, a configured project folder, and an existing regular file canonically inside that folder. This non-idempotent addition cannot be removed through MCP; duplicates are rejected and unknown outcomes must be inspected before retrying.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
     )]
     fn atticus_add_file(&self, Parameters(args): Parameters<AddFileArgs>) -> CallToolResult {
         self.write(|database, settings| {
-            mcp::require_managed_task(database.connection(), &args.task_id)?;
+            mcp::require_live_managed_task(database.connection(), &args.task_id)?;
             if !settings.allow_file_attachments {
                 return Err(AppError::Conflict {
                     message: "File attachment is disabled in Atticus Settings → AI access."
@@ -597,34 +1295,65 @@ impl AtticusMcp {
             }
 
             let path = permitted_attachment_path(database.connection(), &args.task_id, &args.path)?;
-            file_refs::add(
-                database.connection_mut(),
-                &args.task_id,
-                &path.to_string_lossy(),
-                None,
-            )?;
+            let canonical = path.to_string_lossy();
+            if file_refs::list(database.connection(), &args.task_id)?
+                .iter()
+                .any(|file| file.path == canonical)
+            {
+                return Err(AppError::validation(
+                    "path",
+                    "That file is already attached to this task.",
+                ));
+            }
+            file_refs::add(database.connection_mut(), &args.task_id, &canonical, None)?;
             task_detail(database.connection(), &args.task_id)
         })
     }
 
     #[tool(
-        description = "Attach a complete http:// or https:// link to an AI-managed task. User tasks are immutable. Never invent a URL. Requires read/write access."
+        title = "Add an Atticus link",
+        description = "Append a verified complete http:// or https:// URL to a live MCP-managed task. Never invent a URL. This non-idempotent addition cannot be removed through MCP; duplicate URLs are rejected and unknown outcomes must be inspected before retrying. Returns refreshed task detail. Requires read/write access.",
+        output_schema = schema_for_output::<McpToolOutput<TaskDetail>>(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
     )]
     fn atticus_add_link(&self, Parameters(args): Parameters<AddLinkArgs>) -> CallToolResult {
         self.write(|database, _settings| {
-            mcp::require_managed_task(database.connection(), &args.task_id)?;
-            link_refs::add(database.connection_mut(), &args.task_id, &args.url)?;
+            mcp::require_live_managed_task(database.connection(), &args.task_id)?;
+            let url = crate::domain::validate::web_url("url", &args.url)?;
+            if link_refs::list(database.connection(), &args.task_id)?
+                .iter()
+                .any(|link| link.url == url)
+            {
+                return Err(AppError::validation(
+                    "url",
+                    "That link is already attached to this task.",
+                ));
+            }
+            link_refs::add(database.connection_mut(), &args.task_id, &url)?;
             task_detail(database.connection(), &args.task_id)
         })
     }
 }
 
-#[tool_handler(
-    name = "atticus",
-    version = "0.1.0",
-    instructions = r#"Use Atticus as the user's source of truth. MCP writes are confined to projects created through atticus_create_project and shown in the isolated AI Boards sidebar section; all user-created work is immutable. Always inspect before writing and never invent IDs. Move a task to in_progress only when accepted work actually begins. Keep its description, subtasks, labels, links, and permitted file references useful while working. Move it to done only after implementation and appropriate verification succeed; otherwise leave it in progress and record the blocker. New projects and boards already contain Backlog, Todo, In Progress, Review, and Done. Destructive tools are intentionally unavailable. Call atticus_workflow_guide for the complete rules."#
-)]
-impl ServerHandler for AtticusMcp {}
+#[tool_handler]
+impl ServerHandler for AtticusMcp {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(
+                Implementation::new("atticus", env!("CARGO_PKG_VERSION"))
+                    .with_title("Atticus Task Workspace")
+                    .with_description(
+                        "A permissioned local task-and-note workspace with read-only user projects and an isolated MCP-managed write scope.",
+                    ),
+            )
+            .with_instructions(WORKFLOW_GUIDE)
+    }
+}
 
 fn require_read_access(settings: &McpSettings) -> AppResult<()> {
     if settings.access == McpAccess::Disabled {
@@ -651,23 +1380,90 @@ fn require_write_access(settings: &McpSettings) -> AppResult<()> {
     }
 }
 
-fn tool_result<T: Serialize>(result: AppResult<T>) -> CallToolResult {
+fn read_tool_result<T: Serialize>(result: AppResult<T>) -> CallToolResult {
     match result {
-        Ok(value) => match (
-            serde_json::to_value(&value),
-            serde_json::to_string_pretty(&value),
-        ) {
-            (Ok(structured), Ok(readable)) => {
-                let mut result = CallToolResult::structured(structured);
-                result.content = vec![ContentBlock::text(readable)];
-                result
-            }
-            (Err(error), _) | (_, Err(error)) => CallToolResult::error(vec![ContentBlock::text(
-                format!("Atticus completed the operation but could not encode its result: {error}"),
-            )]),
-        },
-        Err(error) => CallToolResult::error(vec![ContentBlock::text(error.to_string())]),
+        Ok(value) => encode_success(&value, false),
+        Err(error) => encode_error(error, false),
     }
+}
+
+fn write_tool_result<T: Serialize>(result: Result<T, (AppError, bool)>) -> CallToolResult {
+    match result {
+        Ok(value) => encode_success(&value, true),
+        Err((error, mutation_may_have_committed)) => {
+            encode_error(error, mutation_may_have_committed)
+        }
+    }
+}
+
+fn encode_success<T: Serialize>(value: &T, mutation_completed: bool) -> CallToolResult {
+    match (
+        serde_json::to_value(value),
+        serde_json::to_string_pretty(value),
+    ) {
+        (Ok(structured), Ok(readable)) => {
+            let mut result = CallToolResult::structured(structured);
+            result.content = vec![ContentBlock::text(readable)];
+            result
+        }
+        (Err(error), _) | (_, Err(error)) => CallToolResult::structured_error(serde_json::json!({
+            "error": {
+                "kind": "encoding",
+                "message": format!("Atticus completed the operation but could not encode its result: {error}"),
+            },
+            "retryableWithSameArguments": false,
+            "mutationMayHaveCommitted": mutation_completed,
+            "recovery": if mutation_completed {
+                "Inspect the target before any retry; the mutation completed but its response could not be encoded."
+            } else {
+                "Report this server error; repeating the same call is unlikely to help."
+            }
+        })),
+    }
+}
+
+fn encode_error(error: AppError, mutation_may_have_committed: bool) -> CallToolResult {
+    let message = error.to_string();
+    let recovery = match &error {
+        AppError::Validation { .. } => {
+            "Correct the named input field, then make one deliberate retry."
+        }
+        AppError::NotFound { .. } => {
+            "Refresh the workspace, board, search, task, or note and use the current opaque ID."
+        }
+        AppError::Conflict { message } if message.contains("Settings → AI access") => {
+            "Ask the user to change Settings → AI access if they want this operation; do not loop."
+        }
+        AppError::Conflict { .. } => {
+            "Read the current resource, reconcile the conflict, and retry only with current state."
+        }
+        _ if mutation_may_have_committed => {
+            "The outcome may have committed. Inspect or search before retrying to avoid duplication."
+        }
+        _ => "Report the server failure. Do not blindly repeat the same call.",
+    };
+
+    let mut result = CallToolResult::structured_error(serde_json::json!({
+        "error": error,
+        "message": message,
+        "retryableWithSameArguments": false,
+        "mutationMayHaveCommitted": mutation_may_have_committed,
+        "recovery": recovery,
+    }));
+    result.content = vec![ContentBlock::text(format!(
+        "{message}\nRecovery: {recovery}"
+    ))];
+    result
+}
+
+fn error_may_follow_mutation(error: &AppError) -> bool {
+    matches!(
+        error,
+        AppError::Database { .. }
+            | AppError::Io { .. }
+            | AppError::Migration { .. }
+            | AppError::Internal { .. }
+    )
 }
 
 fn workspace_overview(conn: &rusqlite::Connection) -> AppResult<WorkspaceOverview> {
@@ -689,9 +1485,32 @@ fn workspace_overview(conn: &rusqlite::Connection) -> AppResult<WorkspaceOvervie
     Ok(WorkspaceOverview { projects: overview })
 }
 
+fn board_detail(conn: &rusqlite::Connection, board_id: &str) -> AppResult<BoardDetail> {
+    let board = boards::find(conn, board_id)?;
+    let project = projects::find(conn, &board.project_id)?;
+    let writable = project.mcp_managed && project.archived_at.is_none();
+    let snapshot = board_view::load(conn, board_id)?;
+    Ok(BoardDetail {
+        project,
+        board,
+        writable,
+        snapshot,
+    })
+}
+
 fn task_detail(conn: &rusqlite::Connection, task_id: &str) -> AppResult<TaskDetail> {
     let task = tasks::find(conn, task_id)?;
+    let project = projects::find(conn, &task.project_id)?;
+    let board = boards::find(conn, &task.board_id)?;
+    let column = columns::find(conn, &task.column_id)?;
+    let mcp_managed = project.mcp_managed;
     Ok(TaskDetail {
+        task_reference: format!("{}-{}", project.key_prefix, task.number),
+        project_name: project.name,
+        board_name: board.name,
+        column_name: column.name,
+        mcp_managed,
+        writable: mcp_managed && project.archived_at.is_none() && task.archived_at.is_none(),
         subtasks: subtasks::list(conn, task_id)?,
         label_ids: labels::for_task(conn, task_id)?,
         available_labels: labels::list(conn, &task.project_id)?,
@@ -699,6 +1518,93 @@ fn task_detail(conn: &rusqlite::Connection, task_id: &str) -> AppResult<TaskDeta
         link_refs: link_refs::list(conn, task_id)?,
         task,
     })
+}
+
+#[derive(Clone)]
+struct NoteProjectAccess {
+    project_name: String,
+    project_key_prefix: String,
+    mcp_managed: bool,
+    writable: bool,
+}
+
+fn note_project_access(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> AppResult<NoteProjectAccess> {
+    let project = projects::find(conn, project_id)?;
+    Ok(NoteProjectAccess {
+        project_name: project.name,
+        project_key_prefix: project.key_prefix,
+        mcp_managed: project.mcp_managed,
+        writable: project.mcp_managed && project.archived_at.is_none(),
+    })
+}
+
+fn note_list(conn: &rusqlite::Connection, project_id: &str) -> AppResult<NoteList> {
+    let access = note_project_access(conn, project_id)?;
+    let note_summaries = notes::list(conn, project_id)?
+        .into_iter()
+        .map(|note| NoteSummary {
+            id: note.id,
+            title: note.title,
+            task_ids: note.task_ids,
+            position: note.position,
+            created_at: note.created_at,
+            updated_at: note.updated_at,
+        })
+        .collect();
+    Ok(NoteList {
+        project_id: project_id.to_owned(),
+        project_name: access.project_name,
+        project_key_prefix: access.project_key_prefix,
+        mcp_managed: access.mcp_managed,
+        writable: access.writable,
+        notes: note_summaries,
+    })
+}
+
+fn note_detail(conn: &rusqlite::Connection, note_id: &str) -> AppResult<NoteDetail> {
+    let note = notes::find(conn, note_id)?;
+    let access = note_project_access(conn, &note.project_id)?;
+    Ok(NoteDetail {
+        project_name: access.project_name,
+        project_key_prefix: access.project_key_prefix,
+        mcp_managed: access.mcp_managed,
+        writable: access.writable,
+        note,
+    })
+}
+
+fn note_search_results(
+    conn: &rusqlite::Connection,
+    hits: Vec<notes::NoteSearchHit>,
+) -> AppResult<Vec<NoteSearchResult>> {
+    let mut project_access = HashMap::<String, NoteProjectAccess>::new();
+    let mut results = Vec::with_capacity(hits.len());
+    for hit in hits {
+        let access = match project_access.get(&hit.project_id) {
+            Some(access) => access.clone(),
+            None => {
+                let access = note_project_access(conn, &hit.project_id)?;
+                project_access.insert(hit.project_id.clone(), access.clone());
+                access
+            }
+        };
+        results.push(NoteSearchResult {
+            note_id: hit.note_id,
+            project_id: hit.project_id,
+            project_name: access.project_name,
+            project_key_prefix: access.project_key_prefix,
+            title: hit.title,
+            excerpt: hit.excerpt,
+            updated_at: hit.updated_at,
+            task_ids: hit.task_ids,
+            mcp_managed: access.mcp_managed,
+            writable: access.writable,
+        });
+    }
+    Ok(results)
 }
 
 fn normalise_column_name(name: &str) -> String {
@@ -730,7 +1636,8 @@ fn resolve_status_column(columns: &[Column], status: WorkflowStatus) -> AppResul
         [column] => Ok((*column).clone()),
         [] => Err(AppError::Conflict {
             message: format!(
-                "This board has no unambiguous {status:?} column. Available columns: {}. Use atticus_move_task with an explicit column ID.",
+                "This board has no unambiguous {} column. Available columns: {}. Use atticus_move_task with an explicit column ID.",
+                status.as_str(),
                 columns
                     .iter()
                     .map(|column| format!("{} ({})", column.name, column.id))
@@ -740,7 +1647,8 @@ fn resolve_status_column(columns: &[Column], status: WorkflowStatus) -> AppResul
         }),
         _ => Err(AppError::Conflict {
             message: format!(
-                "More than one column matches {status:?}: {}. Use atticus_move_task with the intended column ID.",
+                "More than one column matches {}: {}. Use atticus_move_task with the intended column ID.",
+                status.as_str(),
                 matching
                     .iter()
                     .map(|column| format!("{} ({})", column.name, column.id))
@@ -878,6 +1786,25 @@ fn platform_data_dir() -> Option<PathBuf> {
 mod tests {
     use super::*;
 
+    fn structured(result: &CallToolResult) -> &serde_json::Value {
+        result
+            .structured_content
+            .as_ref()
+            .expect("tool result has structured content")
+    }
+
+    fn set_access(server: &AtticusMcp, access: McpAccess) {
+        let database = server.database().expect("database lock");
+        mcp::set_settings(
+            database.connection(),
+            &McpSettings {
+                access,
+                allow_file_attachments: false,
+            },
+        )
+        .expect("access setting saves");
+    }
+
     fn column(id: &str, name: &str) -> Column {
         Column {
             id: id.to_owned(),
@@ -888,6 +1815,669 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn initialization_publishes_one_canonical_professional_contract() {
+        let server = AtticusMcp::new(Database::open_in_memory().expect("database opens"));
+        let info = ServerHandler::get_info(&server);
+
+        assert_eq!(info.server_info.name, "atticus");
+        assert_eq!(
+            info.server_info.title.as_deref(),
+            Some("Atticus Task Workspace")
+        );
+        assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));
+        assert!(info.capabilities.tools.is_some());
+        assert_eq!(info.instructions.as_deref(), Some(WORKFLOW_GUIDE));
+
+        for required in [
+            "not an automatic activity logger",
+            "Treat every database ID as opaque",
+            "expected_updated_at",
+            "project note for durable long-form context",
+            "task_ids, when supplied, likewise replaces",
+            "non-idempotent",
+            "no delete, archive, restore",
+            "server is passive",
+        ] {
+            assert!(
+                WORKFLOW_GUIDE.contains(required),
+                "guide should explain {required}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_tool_has_model_facing_metadata_and_an_output_schema() {
+        let tools = AtticusMcp::tool_router().list_all();
+        assert_eq!(tools.len(), 24);
+
+        let read_only: HashSet<&str> = [
+            "atticus_connection_status",
+            "atticus_workflow_guide",
+            "atticus_list_workspace",
+            "atticus_get_board",
+            "atticus_get_task",
+            "atticus_search_tasks",
+            "atticus_list_notes",
+            "atticus_get_note",
+            "atticus_search_notes",
+        ]
+        .into_iter()
+        .collect();
+        let open_world: HashSet<&str> = ["atticus_create_project", "atticus_add_file"]
+            .into_iter()
+            .collect();
+        let destructive: HashSet<&str> = [
+            "atticus_update_task",
+            "atticus_move_task",
+            "atticus_set_task_status",
+            "atticus_update_subtask",
+            "atticus_set_task_labels",
+            "atticus_update_note",
+        ]
+        .into_iter()
+        .collect();
+        let idempotent: HashSet<&str> = read_only
+            .iter()
+            .copied()
+            .chain(["atticus_move_task", "atticus_set_task_status"])
+            .collect();
+
+        for tool in tools {
+            let name = tool.name.as_ref();
+            assert!(name.starts_with("atticus_"), "unexpected tool name {name}");
+            assert!(tool.title.as_deref().is_some_and(|title| !title.is_empty()));
+            assert!(
+                tool.description
+                    .as_deref()
+                    .is_some_and(|description| description.len() >= 80),
+                "{name} needs an operational description"
+            );
+            assert!(tool.output_schema.is_some(), "{name} needs outputSchema");
+            let output_schema = serde_json::to_string(tool.output_schema.as_ref().unwrap())
+                .expect("output schema serializes");
+            assert!(
+                output_schema.contains("retryableWithSameArguments"),
+                "{name} outputSchema must cover structured execution errors"
+            );
+            if name.ends_with("_note") || name.ends_with("_notes") {
+                let input_schema =
+                    serde_json::to_value(&tool.input_schema).expect("note input schema serializes");
+                assert_eq!(
+                    input_schema["additionalProperties"], false,
+                    "{name} must reject unknown input fields"
+                );
+            }
+
+            let annotations = tool.annotations.expect("annotations are required");
+            assert_eq!(
+                annotations.read_only_hint,
+                Some(read_only.contains(name)),
+                "readOnlyHint for {name}"
+            );
+            assert_eq!(
+                annotations.open_world_hint,
+                Some(open_world.contains(name)),
+                "openWorldHint for {name}"
+            );
+            assert_eq!(annotations.idempotent_hint, Some(idempotent.contains(name)));
+            assert_eq!(
+                annotations.destructive_hint,
+                Some(destructive.contains(name)),
+                "destructiveHint for {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn tool_arguments_reject_unknown_empty_contradictory_and_unsafe_input() {
+        let typo = serde_json::json!({
+            "task_id": "task",
+            "expected_updated_at": 1,
+            "descripton": "misspelled"
+        });
+        assert!(serde_json::from_value::<UpdateTaskArgs>(typo).is_err());
+
+        let empty = UpdateTaskArgs {
+            task_id: "task".to_owned(),
+            expected_updated_at: 1,
+            title: None,
+            description: None,
+            priority: None,
+            due_date: None,
+            clear_due_date: false,
+            estimate_minutes: None,
+            clear_estimate: false,
+        };
+        assert!(empty.validate().is_err());
+
+        let contradictory = UpdateTaskArgs {
+            due_date: Some("2026-08-03".to_owned()),
+            clear_due_date: true,
+            ..empty
+        };
+        assert!(contradictory.validate().is_err());
+
+        let negative_move = MoveTaskArgs {
+            task_id: "task".to_owned(),
+            column_id: "column".to_owned(),
+            index: Some(-1),
+        };
+        assert!(negative_move.validate().is_err());
+
+        let duplicate_labels = SetTaskLabelsArgs {
+            task_id: "task".to_owned(),
+            expected_updated_at: 1,
+            label_ids: vec!["label".to_owned(), "label".to_owned()],
+        };
+        assert!(duplicate_labels.validate().is_err());
+
+        let empty_note_update = UpdateNoteArgs {
+            note_id: "note".to_owned(),
+            expected_updated_at: 1,
+            title: None,
+            body: None,
+            task_ids: None,
+        };
+        assert!(empty_note_update.validate().is_err());
+
+        let duplicate_note_tasks = CreateNoteArgs {
+            project_id: "project".to_owned(),
+            title: "Plan".to_owned(),
+            body: None,
+            task_ids: vec!["task".to_owned(), "task".to_owned()],
+        };
+        assert!(duplicate_note_tasks.validate().is_err());
+
+        let misspelled_note_field = serde_json::json!({
+            "note_id": "note",
+            "expected_updated_at": 1,
+            "taskIds": []
+        });
+        assert!(serde_json::from_value::<UpdateNoteArgs>(misspelled_note_field).is_err());
+
+        let tool_names: HashSet<_> = AtticusMcp::tool_router()
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.into_owned())
+            .collect();
+        assert!(!tool_names.contains("atticus_delete_note"));
+    }
+
+    #[test]
+    fn a_connected_server_rechecks_permissions_and_returns_structured_errors() {
+        let server = AtticusMcp::new(Database::open_in_memory().expect("database opens"));
+        let user_note_id = {
+            let mut database = server.database().expect("database lock");
+            let (project, _) = projects::create(
+                database.connection_mut(),
+                NewProject {
+                    name: "User research".to_owned(),
+                    description: String::new(),
+                    color: "blue".to_owned(),
+                    key_prefix: Some("USR".to_owned()),
+                    directory_path: None,
+                },
+            )
+            .expect("user project creates");
+            notes::create(
+                database.connection_mut(),
+                &project.id,
+                "Private context",
+                "A full project-note body.",
+                &[],
+            )
+            .expect("user note creates")
+            .id
+        };
+
+        let disabled_read = server.atticus_list_workspace();
+        assert_eq!(disabled_read.is_error, Some(true));
+        assert_eq!(structured(&disabled_read)["error"]["kind"], "conflict");
+        assert_eq!(
+            structured(&disabled_read)["retryableWithSameArguments"],
+            false
+        );
+
+        let diagnostic = server.atticus_connection_status();
+        assert_eq!(diagnostic.is_error, Some(false));
+        assert_eq!(structured(&diagnostic)["access"], "disabled");
+        assert!(structured(&diagnostic).get("databasePath").is_none());
+
+        set_access(&server, McpAccess::ReadOnly);
+        assert_eq!(server.atticus_list_workspace().is_error, Some(false));
+        let read_only_note = server.atticus_get_note(Parameters(GetNoteArgs {
+            note_id: user_note_id,
+        }));
+        assert_eq!(read_only_note.is_error, Some(false));
+        assert_eq!(structured(&read_only_note)["writable"], false);
+        assert_eq!(
+            structured(&read_only_note)["note"]["body"],
+            "A full project-note body."
+        );
+        let rejected_write = server.atticus_create_project(Parameters(CreateProjectArgs {
+            name: "Should not exist".to_owned(),
+            description: None,
+            color: Some(ColorToken::Blue),
+            key_prefix: None,
+            directory_path: None,
+        }));
+        assert_eq!(rejected_write.is_error, Some(true));
+        assert_eq!(
+            structured(&rejected_write)["mutationMayHaveCommitted"],
+            false
+        );
+
+        set_access(&server, McpAccess::ReadWrite);
+        let created = server.atticus_create_project(Parameters(CreateProjectArgs {
+            name: "Research programme".to_owned(),
+            description: Some("Work that the user asked Atticus to track.".to_owned()),
+            color: Some(ColorToken::Cyan),
+            key_prefix: Some("RSP".to_owned()),
+            directory_path: None,
+        }));
+        assert_eq!(created.is_error, Some(false));
+        assert_eq!(structured(&created)["columns"].as_array().unwrap().len(), 5);
+
+        let database = server.database().expect("database lock");
+        assert_eq!(mcp::revision(database.connection()).unwrap(), 1);
+    }
+
+    #[test]
+    fn stale_and_archived_task_writes_are_refused_without_revision_changes() {
+        let server = AtticusMcp::new(Database::open_in_memory().expect("database opens"));
+        set_access(&server, McpAccess::ReadWrite);
+
+        let created_project = server.atticus_create_project(Parameters(CreateProjectArgs {
+            name: "Operations".to_owned(),
+            description: None,
+            color: None,
+            key_prefix: Some("OPS".to_owned()),
+            directory_path: None,
+        }));
+        let column_id = structured(&created_project)["columns"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let created_task = server.atticus_create_task(Parameters(CreateTaskArgs {
+            column_id,
+            title: "Prepare the field report".to_owned(),
+            description: Some("# Outcome\n\nPending.".to_owned()),
+            priority: Some(2),
+            due_date: Some("2026-08-10".to_owned()),
+            estimate_minutes: Some(90),
+        }));
+        assert_eq!(created_task.is_error, Some(false));
+        let task_id = structured(&created_task)["task"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let updated_at = structured(&created_task)["task"]["updatedAt"]
+            .as_i64()
+            .unwrap();
+        assert_eq!(structured(&created_task)["taskReference"], "OPS-1");
+        assert_eq!(structured(&created_task)["writable"], true);
+
+        let no_op = server.atticus_move_task(Parameters(MoveTaskArgs {
+            task_id: task_id.clone(),
+            column_id: structured(&created_task)["task"]["columnId"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+            index: Some(0),
+        }));
+        assert_eq!(no_op.is_error, Some(false));
+        assert_eq!(structured(&no_op)["changed"], false);
+        {
+            let database = server.database().expect("database lock");
+            assert_eq!(
+                mcp::revision(database.connection()).unwrap(),
+                2,
+                "an idempotent no-op must not announce an external change"
+            );
+        }
+
+        let stale = server.atticus_update_task(Parameters(UpdateTaskArgs {
+            task_id: task_id.clone(),
+            expected_updated_at: updated_at - 1,
+            title: Some("Stale title".to_owned()),
+            description: None,
+            priority: None,
+            due_date: None,
+            clear_due_date: false,
+            estimate_minutes: None,
+            clear_estimate: false,
+        }));
+        assert_eq!(stale.is_error, Some(true));
+        assert!(structured(&stale)["message"]
+            .as_str()
+            .unwrap()
+            .contains("changed after it was read"));
+
+        {
+            let mut database = server.database().expect("database lock");
+            tasks::set_archived(database.connection_mut(), &task_id, true)
+                .expect("task archives through the owner-facing database API");
+            assert_eq!(mcp::revision(database.connection()).unwrap(), 2);
+        }
+
+        let archived_write = server.atticus_add_link(Parameters(AddLinkArgs {
+            task_id: task_id.clone(),
+            url: "https://example.com/report".to_owned(),
+        }));
+        assert_eq!(archived_write.is_error, Some(true));
+        assert!(structured(&archived_write)["message"]
+            .as_str()
+            .unwrap()
+            .contains("Archived tasks are read-only"));
+
+        let database = server.database().expect("database lock");
+        assert_eq!(mcp::revision(database.connection()).unwrap(), 2);
+        assert!(link_refs::list(database.connection(), &task_id)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn the_complete_mcp_workflow_returns_authoritative_state() {
+        let project_folder = tempfile::tempdir().expect("project folder");
+        let evidence_path = project_folder.path().join("evidence.md");
+        std::fs::write(&evidence_path, "verified evidence").expect("evidence file");
+
+        let server = AtticusMcp::new(Database::open_in_memory().expect("database opens"));
+        {
+            let database = server.database().expect("database lock");
+            mcp::set_settings(
+                database.connection(),
+                &McpSettings {
+                    access: McpAccess::ReadWrite,
+                    allow_file_attachments: true,
+                },
+            )
+            .expect("read/write and files enable");
+        }
+
+        let project_result = server.atticus_create_project(Parameters(CreateProjectArgs {
+            name: "Publication".to_owned(),
+            description: Some("Research and writing deliverables.".to_owned()),
+            color: Some(ColorToken::Plum),
+            key_prefix: Some("PUB".to_owned()),
+            directory_path: Some(project_folder.path().to_string_lossy().into_owned()),
+        }));
+        let project_id = structured(&project_result)["project"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let board_id = structured(&project_result)["initialBoard"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let todo_column = structured(&project_result)["columns"][1]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+
+        let extra_board = server.atticus_create_board(Parameters(CreateBoardArgs {
+            project_id: project_id.clone(),
+            name: "Editorial calendar".to_owned(),
+        }));
+        assert_eq!(
+            structured(&extra_board)["columns"]
+                .as_array()
+                .unwrap()
+                .len(),
+            5
+        );
+        let custom_column = server.atticus_create_column(Parameters(CreateColumnArgs {
+            board_id: board_id.clone(),
+            name: "Waiting for source".to_owned(),
+        }));
+        assert_eq!(structured(&custom_column)["name"], "Waiting for source");
+
+        let created_task = server.atticus_create_task(Parameters(CreateTaskArgs {
+            column_id: todo_column,
+            title: "Publish the field guide".to_owned(),
+            description: Some("# Brief\n\nPrepare the approved field guide.".to_owned()),
+            priority: Some(3),
+            due_date: Some("2026-08-20".to_owned()),
+            estimate_minutes: Some(240),
+        }));
+        let task_id = structured(&created_task)["task"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let first_updated_at = structured(&created_task)["task"]["updatedAt"]
+            .as_i64()
+            .unwrap();
+
+        let created_note = server.atticus_create_note(Parameters(CreateNoteArgs {
+            project_id: project_id.clone(),
+            title: "Field guide decisions".to_owned(),
+            body: Some("# Decision log\n\nUse the reviewed outline.".to_owned()),
+            task_ids: vec![task_id.clone()],
+        }));
+        assert_eq!(created_note.is_error, Some(false));
+        assert_eq!(structured(&created_note)["writable"], true);
+        assert_eq!(structured(&created_note)["note"]["taskIds"][0], task_id);
+        let note_id = structured(&created_note)["note"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let note_updated_at = structured(&created_note)["note"]["updatedAt"]
+            .as_i64()
+            .unwrap();
+
+        let listed_notes = server.atticus_list_notes(Parameters(ListNotesArgs {
+            project_id: project_id.clone(),
+        }));
+        assert_eq!(structured(&listed_notes)["notes"][0]["id"], note_id);
+        assert!(structured(&listed_notes)["notes"][0].get("body").is_none());
+
+        let updated_note = server.atticus_update_note(Parameters(UpdateNoteArgs {
+            note_id: note_id.clone(),
+            expected_updated_at: note_updated_at,
+            title: None,
+            body: Some(
+                "# Decision log\n\nUse the reviewed outline and preserve source notes.".to_owned(),
+            ),
+            task_ids: Some(Vec::new()),
+        }));
+        assert_eq!(updated_note.is_error, Some(false));
+        assert!(structured(&updated_note)["note"]["taskIds"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert!(structured(&server.atticus_get_note(Parameters(GetNoteArgs {
+            note_id: note_id.clone(),
+        })))["note"]["body"]
+            .as_str()
+            .unwrap()
+            .contains("preserve source notes"));
+        let note_search = server.atticus_search_notes(Parameters(SearchNotesArgs {
+            query: "preserve source".to_owned(),
+            project_id: Some(project_id.clone()),
+            limit: Some(10),
+        }));
+        assert_eq!(structured(&note_search)[0]["noteId"], note_id);
+        assert_eq!(structured(&note_search)[0]["writable"], true);
+
+        let updated_task = server.atticus_update_task(Parameters(UpdateTaskArgs {
+            task_id: task_id.clone(),
+            expected_updated_at: first_updated_at,
+            title: None,
+            description: Some(
+                "# Brief\n\nPrepare the approved field guide.\n\n## Decision\n\nUse the reviewed outline."
+                    .to_owned(),
+            ),
+            priority: None,
+            due_date: None,
+            clear_due_date: false,
+            estimate_minutes: None,
+            clear_estimate: false,
+        }));
+        assert_eq!(updated_task.is_error, Some(false));
+
+        let in_progress = server.atticus_set_task_status(Parameters(SetTaskStatusArgs {
+            task_id: task_id.clone(),
+            status: WorkflowStatus::InProgress,
+        }));
+        assert_eq!(structured(&in_progress)["requestedStatus"], "in_progress");
+        assert_eq!(structured(&in_progress)["result"]["changed"], true);
+
+        let with_subtask = server.atticus_add_subtask(Parameters(AddSubtaskArgs {
+            task_id: task_id.clone(),
+            title: "Verify every cited source".to_owned(),
+        }));
+        let subtask_id = structured(&with_subtask)["subtasks"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let subtask_updated_at = structured(&with_subtask)["subtasks"][0]["updatedAt"]
+            .as_i64()
+            .unwrap();
+        let completed_subtask = server.atticus_update_subtask(Parameters(UpdateSubtaskArgs {
+            subtask_id,
+            expected_updated_at: subtask_updated_at,
+            title: None,
+            done: Some(true),
+        }));
+        assert_eq!(structured(&completed_subtask)["subtasks"][0]["done"], true);
+
+        let label = server.atticus_create_label(Parameters(CreateLabelArgs {
+            project_id: project_id.clone(),
+            name: "source-verified".to_owned(),
+            color: ColorToken::Grass,
+        }));
+        let label_id = structured(&label)["id"].as_str().unwrap().to_owned();
+        let task_timestamp = structured(&completed_subtask)["task"]["updatedAt"]
+            .as_i64()
+            .unwrap();
+        let labelled = server.atticus_set_task_labels(Parameters(SetTaskLabelsArgs {
+            task_id: task_id.clone(),
+            expected_updated_at: task_timestamp,
+            label_ids: vec![label_id.clone()],
+        }));
+        assert_eq!(structured(&labelled)["labelIds"][0], label_id);
+
+        let linked = server.atticus_add_link(Parameters(AddLinkArgs {
+            task_id: task_id.clone(),
+            url: "https://example.com/reviewed-source".to_owned(),
+        }));
+        assert_eq!(structured(&linked)["linkRefs"].as_array().unwrap().len(), 1);
+        let duplicate_link = server.atticus_add_link(Parameters(AddLinkArgs {
+            task_id: task_id.clone(),
+            url: "https://example.com/reviewed-source".to_owned(),
+        }));
+        assert_eq!(duplicate_link.is_error, Some(true));
+
+        let attached = server.atticus_add_file(Parameters(AddFileArgs {
+            task_id: task_id.clone(),
+            path: evidence_path.to_string_lossy().into_owned(),
+        }));
+        assert_eq!(
+            structured(&attached)["fileRefs"].as_array().unwrap().len(),
+            1
+        );
+
+        let done = server.atticus_set_task_status(Parameters(SetTaskStatusArgs {
+            task_id: task_id.clone(),
+            status: WorkflowStatus::Done,
+        }));
+        assert_eq!(structured(&done)["destination"]["name"], "Done");
+
+        assert_eq!(
+            structured(&server.atticus_get_task(Parameters(GetTaskArgs {
+                task_id: task_id.clone(),
+            })))["taskReference"],
+            "PUB-1"
+        );
+        assert_eq!(
+            structured(&server.atticus_get_board(Parameters(GetBoardArgs { board_id })))
+                ["writable"],
+            true
+        );
+        let search = server.atticus_search_tasks(Parameters(SearchTasksArgs {
+            query: "pub-1".to_owned(),
+            limit: Some(10),
+        }));
+        assert_eq!(structured(&search)[0]["taskId"], task_id);
+        assert_eq!(structured(&search)[0]["writable"], true);
+
+        let database = server.database().expect("database lock");
+        assert_eq!(
+            mcp::revision(database.connection()).unwrap(),
+            15,
+            "each successful mutation increments once; the rejected duplicate does not"
+        );
+    }
+
+    #[test]
+    fn stale_and_archived_note_writes_are_refused_without_revision_changes() {
+        let server = AtticusMcp::new(Database::open_in_memory().expect("database opens"));
+        set_access(&server, McpAccess::ReadWrite);
+
+        let project = server.atticus_create_project(Parameters(CreateProjectArgs {
+            name: "Managed notes".to_owned(),
+            description: None,
+            color: None,
+            key_prefix: Some("MNT".to_owned()),
+            directory_path: None,
+        }));
+        let project_id = structured(&project)["project"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let created = server.atticus_create_note(Parameters(CreateNoteArgs {
+            project_id: project_id.clone(),
+            title: "Current plan".to_owned(),
+            body: Some("Authoritative body".to_owned()),
+            task_ids: Vec::new(),
+        }));
+        let note_id = structured(&created)["note"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let updated_at = structured(&created)["note"]["updatedAt"].as_i64().unwrap();
+
+        let stale = server.atticus_update_note(Parameters(UpdateNoteArgs {
+            note_id: note_id.clone(),
+            expected_updated_at: updated_at - 1,
+            title: Some("Stale plan".to_owned()),
+            body: None,
+            task_ids: None,
+        }));
+        assert_eq!(stale.is_error, Some(true));
+        assert!(structured(&stale)["message"]
+            .as_str()
+            .unwrap()
+            .contains("changed after it was read"));
+
+        {
+            let mut database = server.database().expect("database lock");
+            projects::set_archived(database.connection_mut(), &project_id, true)
+                .expect("project archives through the owner-facing database API");
+        }
+        let archived = server.atticus_update_note(Parameters(UpdateNoteArgs {
+            note_id: note_id.clone(),
+            expected_updated_at: updated_at,
+            title: Some("Archived plan".to_owned()),
+            body: None,
+            task_ids: None,
+        }));
+        assert_eq!(archived.is_error, Some(true));
+        assert!(structured(&archived)["message"]
+            .as_str()
+            .unwrap()
+            .contains("Archived projects are read-only"));
+
+        let database = server.database().expect("database lock");
+        assert_eq!(mcp::revision(database.connection()).unwrap(), 2);
+        assert_eq!(
+            notes::find(database.connection(), &note_id).unwrap().title,
+            "Current plan"
+        );
     }
 
     #[test]
@@ -1010,7 +2600,7 @@ mod tests {
     }
 
     #[test]
-    fn a_real_mcp_write_cannot_modify_a_known_user_task_id() {
+    fn real_mcp_writes_cannot_modify_known_user_task_or_note_ids() {
         let mut database = Database::open_in_memory().expect("database opens");
         let (_project, board_id) = projects::create(
             database.connection_mut(),
@@ -1035,6 +2625,14 @@ mod tests {
             },
         )
         .expect("user task creates");
+        let note = notes::create(
+            database.connection_mut(),
+            &task.project_id,
+            "User-owned note",
+            "Private body",
+            std::slice::from_ref(&task.id),
+        )
+        .expect("user note creates");
         mcp::set_settings(
             database.connection(),
             &McpSettings {
@@ -1045,8 +2643,15 @@ mod tests {
         .expect("read/write enables");
 
         let server = AtticusMcp::new(database);
+        let readable_note = server.atticus_get_note(Parameters(GetNoteArgs {
+            note_id: note.id.clone(),
+        }));
+        assert_eq!(readable_note.is_error, Some(false));
+        assert_eq!(structured(&readable_note)["writable"], false);
+        assert_eq!(structured(&readable_note)["note"]["body"], "Private body");
         let response = server.atticus_update_task(Parameters(UpdateTaskArgs {
             task_id: task.id.clone(),
+            expected_updated_at: task.updated_at,
             title: Some("AI changed this".to_owned()),
             description: None,
             priority: None,
@@ -1060,6 +2665,17 @@ mod tests {
         assert!(serde_json::to_string(&response.content)
             .expect("response serializes")
             .contains("outside the isolated AI Boards section"));
+        let note_response = server.atticus_update_note(Parameters(UpdateNoteArgs {
+            note_id: note.id.clone(),
+            expected_updated_at: note.updated_at,
+            title: None,
+            body: Some("AI changed this".to_owned()),
+            task_ids: None,
+        }));
+        assert_eq!(note_response.is_error, Some(true));
+        assert!(serde_json::to_string(&note_response.content)
+            .expect("response serializes")
+            .contains("outside the isolated AI Boards section"));
 
         let locked = server.database().expect("database lock");
         assert_eq!(
@@ -1067,6 +2683,12 @@ mod tests {
                 .expect("task remains")
                 .title,
             "User-owned title"
+        );
+        assert_eq!(
+            notes::find(locked.connection(), &note.id)
+                .expect("note remains")
+                .body,
+            "Private body"
         );
         assert_eq!(
             mcp::revision(locked.connection()).expect("revision reads"),

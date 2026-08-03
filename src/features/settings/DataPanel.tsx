@@ -14,6 +14,7 @@ import { messageFor, toAppError } from "@/lib/errors";
 import { ipc } from "@/lib/ipc";
 import { queryKeys } from "@/lib/query/keys";
 import { describePlan } from "./importPlan";
+import { SettingsBlock } from "./SettingsPrimitives";
 
 interface DataPanelProps {
   projects: Project[];
@@ -23,6 +24,10 @@ interface DataPanelProps {
 
 /** Typed to confirm a replace, the same shape of gate as deleting a project. */
 const REPLACE_WORD = "replace";
+const BACKUP_DATE = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 
 export function DataPanel({ projects, onDataReplaced }: DataPanelProps) {
   const client = useQueryClient();
@@ -115,24 +120,24 @@ export function DataPanel({ projects, onDataReplaced }: DataPanelProps) {
   });
 
   return (
-    <section aria-label="Export, import and backups" className="space-y-4">
-      <section aria-labelledby="data-heading" className="border-border-subtle border-y px-1 py-4">
-        <h3 id="data-heading" className="text-fg-primary text-sm font-semibold">
-          Export and import
-        </h3>
-        <p className="text-fg-secondary mt-1 text-xs">
-          Move a complete workspace or one project between Atticus installations.
-        </p>
-
+    <section aria-label="Export, import and backups">
+      <SettingsBlock
+        marker="02"
+        title="Export and import"
+        description="Move a complete workspace or one project between Atticus installations. Importing always begins with a read-only preview."
+      >
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1">
-            <span className="text-fg-secondary text-2xs font-medium">What to export</span>
+            <span className="text-fg-secondary font-mono text-[9px] font-medium tracking-[0.08em] uppercase">
+              Export scope
+            </span>
             <select
+              aria-label="What to export"
               value={scope}
               onChange={(event) => {
                 setScope(event.target.value);
               }}
-              className="border-border-strong bg-surface-raised text-fg-primary h-9 min-w-36 rounded-lg border px-2.5 text-xs"
+              className="dui-select border-border-strong bg-surface-app text-fg-primary h-9 min-h-0 min-w-44 rounded-md border px-2.5 text-xs"
             >
               <option value="everything">Everything</option>
               {projects.map((project) => (
@@ -189,41 +194,60 @@ export function DataPanel({ projects, onDataReplaced }: DataPanelProps) {
             />
           </div>
         ) : null}
-      </section>
+      </SettingsBlock>
 
-      <section
-        aria-labelledby="backups-heading"
-        className="border-border-subtle border-y px-1 py-4"
+      <SettingsBlock
+        marker="03"
+        title="Backup history"
+        description="Restore an earlier snapshot to roll back local changes. The current database is backed up before any restore begins."
+        status={
+          backups.data === undefined ? undefined : (
+            <span
+              data-numeric
+              className="text-fg-secondary font-mono text-2xs tracking-[0.05em] uppercase"
+            >
+              {String(backups.data.length).padStart(2, "0")} snapshots
+            </span>
+          )
+        }
       >
-        <h3 id="backups-heading" className="text-fg-primary text-sm font-semibold">
-          Backup history
-        </h3>
-        <p className="text-fg-secondary mt-1 text-xs">
-          Restore an earlier snapshot if you need to roll back local changes.
-        </p>
-
-        {backups.data === undefined ? (
-          <p role="status" className="text-fg-secondary mt-4 text-2xs">
+        {backups.isError ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <p role="alert" className="text-danger-fg text-xs">
+              Backup history could not be read.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                void backups.refetch();
+              }}
+            >
+              Try again
+            </Button>
+          </div>
+        ) : backups.data === undefined ? (
+          <p role="status" className="text-fg-secondary text-2xs">
             Reading backups…
           </p>
         ) : backups.data.length === 0 ? (
-          <p className="text-fg-secondary mt-4 text-2xs">
+          <p className="text-fg-secondary text-2xs">
             No backups yet. One is taken automatically before any schema change or replace-import.
           </p>
         ) : (
           <ul
-            aria-labelledby="backups-heading"
-            className="border-border-subtle mt-3 divide-y divide-(--color-border-subtle) border-t"
+            aria-label="Backup history"
+            className="border-border-default divide-border-subtle divide-y border-y"
           >
-            {backups.data.slice(0, 10).map((snapshot) => (
-              <li key={snapshot.path} className="flex items-center gap-3 py-2">
+            {backups.data.map((snapshot) => (
+              <li key={snapshot.path} className="flex items-center gap-3 px-2 py-3">
                 <span className="min-w-0 flex-1">
-                  <span className="text-fg-primary block truncate font-mono text-2xs">
-                    {snapshot.fileName}
+                  <span className="text-fg-primary block text-xs font-medium">
+                    {BACKUP_DATE.format(new Date(snapshot.takenAt))}
                   </span>
-                  <span className="text-fg-secondary text-2xs">
-                    {snapshot.manual ? "Taken by you" : "Taken automatically"} ·{" "}
-                    <span data-numeric>{formatBytes(snapshot.sizeBytes)}</span>
+                  <span className="text-fg-secondary mt-0.5 block truncate font-mono text-2xs">
+                    {snapshot.fileName} · {snapshot.manual ? "Taken by you" : "Taken automatically"}{" "}
+                    · <span data-numeric>{formatBytes(snapshot.sizeBytes)}</span>
                   </span>
                 </span>
                 <Button
@@ -240,7 +264,7 @@ export function DataPanel({ projects, onDataReplaced }: DataPanelProps) {
             ))}
           </ul>
         )}
-      </section>
+      </SettingsBlock>
 
       {restoring !== null ? (
         <ConfirmDialog
@@ -286,8 +310,14 @@ function ImportChoice({
   const [typed, setTyped] = useState("");
 
   return (
-    <div className="border-border-strong rounded-md border p-3">
-      <p className="text-fg-primary text-xs">
+    <div className="border-border-default border-y py-3">
+      <p
+        role="status"
+        className="text-accent-fg font-mono text-[9px] font-semibold tracking-[0.08em] uppercase"
+      >
+        Preview / nothing changed
+      </p>
+      <p className="text-fg-primary mt-1 text-xs">
         This file will create <strong>{describePlan(plan)}</strong>.
       </p>
 
@@ -358,20 +388,20 @@ function ImportChoice({
 
 function IssueList({ issues }: { issues: { path: string; message: string }[] }) {
   return (
-    <div role="alert" className="border-danger-border bg-danger-bg rounded-md border p-3">
+    <div role="alert" className="border-danger-fg border-l-2 py-0.5 pl-4">
       <p className="text-danger-fg text-xs font-semibold">
         That file wasn&rsquo;t imported. Nothing has been changed.
       </p>
-      <ul className="mt-2 space-y-1">
-        {issues.slice(0, 20).map((issue) => (
-          <li key={`${issue.path}-${issue.message}`} className="text-fg-primary text-2xs">
+      <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto pr-2">
+        {issues.map((issue, index) => (
+          <li
+            key={`${String(index)}-${issue.path}-${issue.message}`}
+            className="text-fg-primary text-2xs"
+          >
             <span className="font-mono">{issue.path}</span> — {issue.message}
           </li>
         ))}
       </ul>
-      {issues.length > 20 ? (
-        <p className="text-fg-secondary mt-2 text-2xs">…and {String(issues.length - 20)} more.</p>
-      ) : null}
     </div>
   );
 }

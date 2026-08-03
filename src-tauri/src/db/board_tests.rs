@@ -9,6 +9,7 @@ use crate::db::columns::{self, ColumnDisposition, ColumnSettings};
 use crate::db::file_refs;
 use crate::db::labels;
 use crate::db::link_refs;
+use crate::db::notes;
 use crate::db::projects::{self, NewProject};
 use crate::db::saved_filters;
 use crate::db::search;
@@ -1085,6 +1086,14 @@ fn deleting_a_task_takes_its_subtasks_labels_files_and_links_with_it() {
         "https://example.com/spec",
     )
     .expect("link");
+    let note = notes::create(
+        fixture.db.connection_mut(),
+        &project_id,
+        "Task context",
+        "The note remains project-owned.",
+        std::slice::from_ref(&task_id),
+    )
+    .expect("note");
 
     let snapshot = tasks::delete(fixture.db.connection_mut(), &task_id).expect("delete");
 
@@ -1092,12 +1101,15 @@ fn deleting_a_task_takes_its_subtasks_labels_files_and_links_with_it() {
     assert_eq!(snapshot.label_ids.len(), 1);
     assert_eq!(snapshot.file_refs.len(), 1);
     assert_eq!(snapshot.link_refs.len(), 1);
+    assert_eq!(snapshot.note_task_links.len(), 1);
+    assert_eq!(snapshot.note_task_links[0].note_id, note.id);
 
     for (table, count) in [
         ("subtasks", 0),
         ("task_labels", 0),
         ("file_refs", 0),
         ("link_refs", 0),
+        ("note_task_links", 0),
     ] {
         let remaining: i64 = fixture
             .db
@@ -1141,6 +1153,12 @@ fn deleting_a_task_takes_its_subtasks_labels_files_and_links_with_it() {
             .expect("labels")
             .len(),
         1
+    );
+    assert_eq!(
+        notes::find(fixture.db.connection(), &note.id)
+            .expect("the note survives and its link is restored")
+            .task_ids,
+        [task_id]
     );
 }
 
@@ -1679,8 +1697,17 @@ fn the_order_after_a_reopen_is_the_order_before_it() {
 #[test]
 fn undoing_a_column_delete_brings_back_the_column_its_tasks_and_its_place() {
     let mut fixture = fixture();
-    fixture.add_task(1, "First");
-    fixture.add_task(1, "Second");
+    let first = fixture.add_task(1, "First");
+    let second = fixture.add_task(1, "Second");
+    let project_id = project_of(&fixture);
+    let note = notes::create(
+        fixture.db.connection_mut(),
+        &project_id,
+        "Column context",
+        "",
+        &[first.clone(), second.clone()],
+    )
+    .expect("note");
 
     let deleted = columns::delete(
         fixture.db.connection_mut(),
@@ -1688,6 +1715,12 @@ fn undoing_a_column_delete_brings_back_the_column_its_tasks_and_its_place() {
         &ColumnDisposition::DeleteTasks,
     )
     .expect("delete");
+    assert_eq!(
+        notes::find(fixture.db.connection(), &note.id)
+            .expect("note survives column deletion")
+            .task_ids,
+        Vec::<String>::new()
+    );
 
     undo::apply(
         fixture.db.connection_mut(),
@@ -1704,6 +1737,12 @@ fn undoing_a_column_delete_brings_back_the_column_its_tasks_and_its_place() {
         [0, 1, 2, 3, 4]
     );
     assert_eq!(fixture.titles_in(1), ["First", "Second"]);
+    assert_eq!(
+        notes::find(fixture.db.connection(), &note.id)
+            .expect("note links restored")
+            .task_ids,
+        [first, second]
+    );
 }
 
 #[test]

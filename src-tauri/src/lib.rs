@@ -152,6 +152,7 @@ pub fn run() {
             commands::updates::updates_status,
             commands::updates::updates_restart,
             commands::notes::notes_list,
+            commands::notes::notes_list_all,
             commands::notes::note_create,
             commands::notes::note_update,
             commands::notes::note_delete,

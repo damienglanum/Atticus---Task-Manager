@@ -1,5 +1,6 @@
 //! Project persistence.
 
+use rmcp::schemars::JsonSchema;
 use rusqlite::{Connection, OptionalExtension, Row, Transaction};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -14,7 +15,7 @@ use crate::error::{AppError, AppResult};
 pub const DEFAULT_COLUMNS: [&str; 5] = ["Backlog", "Todo", "In Progress", "Review", "Done"];
 pub const DEFAULT_BOARD_NAME: &str = "Board";
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "Project.ts")]
 pub struct Project {
