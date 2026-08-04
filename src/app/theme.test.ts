@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { applyTheme, applyThemePreference, resolveSystemTheme, resolveTheme } from "./theme";
+import {
+  applyColorPalette,
+  applyTheme,
+  applyThemePreference,
+  resolveSystemTheme,
+  resolveTheme,
+} from "./theme";
 
 /** jsdom has no real `matchMedia`, so tests drive it explicitly. */
 function stubPrefersDark(prefersDark: boolean) {
@@ -33,8 +39,36 @@ function themeClass(): string | undefined {
 
 afterEach(() => {
   document.documentElement.classList.remove("light", "dark");
+  document.documentElement.classList.remove(
+    "palette-atticus",
+    "palette-green-twilight",
+    "palette-wisteria-prussian",
+    "palette-violet-linen",
+    "palette-parchment-coral",
+    "palette-custard-pine",
+    "palette-laser-gold",
+  );
   document.documentElement.style.colorScheme = "";
   vi.unstubAllGlobals();
+});
+
+describe("applyColorPalette", () => {
+  it("leaves exactly one colour-palette class on the document", () => {
+    applyColorPalette("green-twilight");
+    applyColorPalette("custard-pine");
+
+    expect(
+      [...document.documentElement.classList].filter((name) => name.startsWith("palette-")),
+    ).toStrictEqual(["palette-custard-pine"]);
+  });
+
+  it("does not disturb the resolved light or dark class", () => {
+    applyTheme("dark");
+    applyColorPalette("violet-linen");
+
+    expect(themeClass()).toBe("dark");
+    expect(document.documentElement).toHaveClass("palette-violet-linen");
+  });
 });
 
 describe("applyTheme", () => {

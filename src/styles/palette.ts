@@ -14,16 +14,25 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { ColorPalette } from "@/lib/bindings/ColorPalette";
+
 export type Theme = "light" | "dark";
 
 const STYLES_DIR = dirname(fileURLToPath(import.meta.url));
 const NODE_MODULES = resolve(STYLES_DIR, "../../node_modules");
 
 /** Selectors whose declarations apply, per theme. Source order breaks ties, as in the cascade. */
-const SELECTORS: Record<Theme, ReadonlySet<string>> = {
+const THEME_SELECTORS: Record<Theme, ReadonlySet<string>> = {
   light: new Set([":root", ".light", ".light-theme", "@theme"]),
   dark: new Set([":root", ".light", ".light-theme", "@theme", ".dark", ".dark-theme"]),
 };
+
+function selectorsFor(theme: Theme, colorPalette: ColorPalette): ReadonlySet<string> {
+  const selectors = new Set(THEME_SELECTORS[theme]);
+  selectors.add(`.palette-${colorPalette}`);
+  if (theme === "dark") selectors.add(`.dark.palette-${colorPalette}`);
+  return selectors;
+}
 
 interface Block {
   readonly selectors: string[];
@@ -128,8 +137,11 @@ function stylesheets(): string[] {
  * Every custom property in effect under `theme`, with `var()` references
  * resolved to a literal value.
  */
-export function resolvePalette(theme: Theme): Map<string, string> {
-  const applicable = SELECTORS[theme];
+export function resolvePalette(
+  theme: Theme,
+  colorPalette: ColorPalette = "atticus",
+): Map<string, string> {
+  const applicable = selectorsFor(theme, colorPalette);
   const raw = new Map<string, string>();
 
   for (const sheet of stylesheets()) {
@@ -155,8 +167,12 @@ function dereference(name: string, raw: Map<string, string>, seen: Set<string>):
 }
 
 /** The colour a token resolves to under `theme`, as `#rrggbb`. */
-export function colorOf(token: string, theme: Theme): string {
-  const value = resolvePalette(theme).get(token);
+export function colorOf(
+  token: string,
+  theme: Theme,
+  colorPalette: ColorPalette = "atticus",
+): string {
+  const value = resolvePalette(theme, colorPalette).get(token);
   if (value === undefined) throw new Error(`No such token: ${token} (${theme})`);
   if (!/^#[0-9a-f]{6}$/i.test(value)) {
     throw new Error(`${token} is not a plain sRGB hex under ${theme}: ${value}`);
@@ -189,8 +205,18 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 /** Contrast between two tokens under one theme, rounded the way it is reported. */
-export function tokenContrast(foreground: string, background: string, theme: Theme): number {
+export function tokenContrast(
+  foreground: string,
+  background: string,
+  theme: Theme,
+  colorPalette: ColorPalette = "atticus",
+): number {
   return (
-    Math.round(contrastRatio(colorOf(foreground, theme), colorOf(background, theme)) * 100) / 100
+    Math.round(
+      contrastRatio(
+        colorOf(foreground, theme, colorPalette),
+        colorOf(background, theme, colorPalette),
+      ) * 100,
+    ) / 100
   );
 }

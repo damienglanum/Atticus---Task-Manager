@@ -22,6 +22,7 @@ import type { BoardSnapshot } from "./bindings/BoardSnapshot";
 import type { Column } from "./bindings/Column";
 import type { ColumnDisposition } from "./bindings/ColumnDisposition";
 import type { ColumnSettings } from "./bindings/ColumnSettings";
+import type { ColorPalette } from "./bindings/ColorPalette";
 import type { FileRef } from "./bindings/FileRef";
 import type { Label } from "./bindings/Label";
 import type { LabelInput } from "./bindings/LabelInput";
@@ -70,6 +71,8 @@ export const ipc = {
   preferencesGet: () => call<Preferences>("preferences_get"),
   preferencesSetTheme: (theme: ThemePreference) =>
     call<Preferences>("preferences_set_theme", { theme }),
+  preferencesSetColorPalette: (colorPalette: ColorPalette) =>
+    call<Preferences>("preferences_set_color_palette", { colorPalette }),
   // The titlebar is drawn by macOS from the window's own theme, not from the
   // web contents. See `window_set_theme` in Rust.
   windowSetTheme: (theme: ResolvedTheme) => call<null>("window_set_theme", { theme }),

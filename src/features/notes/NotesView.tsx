@@ -50,9 +50,9 @@ interface NotesViewProps {
  * The project's document workspace.
  *
  * The structure follows the durable patterns shared by Notion and Obsidian: a
- * quiet page explorer, one focused document canvas, and contextual links in a
- * secondary pane. Notes stay plain Markdown in storage; the interface does not
- * add a second document model on top of them.
+ * quiet page explorer, one focused document canvas, and compact linked work in
+ * the page properties. Notes stay plain Markdown in storage; the interface
+ * does not add a second document model on top of them.
  */
 export function NotesView({
   projectId,
@@ -488,7 +488,7 @@ export function NoteEditor({
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 2xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="min-h-0 flex-1">
         <div className="min-h-0 min-w-0 overflow-y-auto">
           <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col px-7 pt-10 pb-16 sm:px-10 xl:px-14">
             <FileText size={28} strokeWidth={1.4} aria-hidden className="text-fg-secondary mb-4" />
@@ -569,13 +569,6 @@ export function NoteEditor({
             </div>
           </div>
         </div>
-
-        <LinkedWorkRail
-          taskIds={taskIds}
-          tasks={taskContexts}
-          onChange={replaceTaskIds}
-          onOpenTask={onOpenTask}
-        />
       </div>
     </section>
   );
@@ -657,6 +650,7 @@ function NoteProperties({
   onOpenTask,
 }: LinkedWorkProps & { projectName: string; updatedAt: number }) {
   const linked = resolveTasks(taskIds, tasks);
+  const linkedCount = linked.filter((task) => task !== null).length;
 
   return (
     <dl className="text-fg-secondary mt-6 max-w-2xl space-y-1 text-xs">
@@ -669,25 +663,48 @@ function NoteProperties({
         <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
           {linked.map((task, index) =>
             task === null ? (
-              <span key={taskIds[index]} className="text-fg-secondary px-1.5 py-1">
+              <button
+                key={taskIds[index]}
+                type="button"
+                aria-label="Remove unavailable task reference"
+                onClick={() => {
+                  onChange(taskIds.filter((id) => id !== taskIds[index]));
+                }}
+                className="border-border-subtle text-fg-secondary hover:border-danger-border hover:text-danger-fg inline-flex h-8 cursor-default items-center gap-1.5 rounded-md border px-2.5"
+              >
                 Unavailable task
-              </span>
+                <Unlink size={11} aria-hidden />
+              </button>
             ) : (
               <button
                 key={task.id}
                 type="button"
+                aria-label={`Open ${task.reference}: ${task.title}`}
+                title={`${task.columnName} · ${task.boardName}`}
                 onClick={() => {
                   onOpenTask(task);
                 }}
-                className="text-fg-primary hover:bg-surface-sunken inline-flex h-7 cursor-default items-center gap-1 rounded-md px-1.5 font-mono text-[10px]"
+                className={cn(
+                  "border-border-subtle bg-surface-card hover:border-border-default hover:bg-surface-sunken inline-flex h-8 max-w-full cursor-default items-center gap-2 rounded-md border px-2.5",
+                  task.archived ? "opacity-70" : "",
+                )}
               >
-                {task.reference}
+                <span className="text-accent-fg shrink-0 font-mono text-[9px] tracking-[0.04em]">
+                  {task.reference}
+                </span>
+                <span className="text-fg-primary max-w-56 truncate text-xs">{task.title}</span>
+                <span className="text-fg-secondary hidden shrink-0 text-[9px] sm:inline">
+                  {task.archived ? "Archived" : task.columnName}
+                </span>
               </button>
             ),
           )}
-          <span className="2xl:hidden">
-            <TaskLinkMenu taskIds={taskIds} tasks={tasks} onChange={onChange} />
-          </span>
+          <TaskLinkMenu
+            taskIds={taskIds}
+            tasks={tasks}
+            onChange={onChange}
+            label={linkedCount === 0 ? "Link task" : "Edit links"}
+          />
         </dd>
       </div>
       <div className="flex min-h-7 items-start gap-3">
@@ -705,110 +722,16 @@ interface LinkedWorkProps {
   onOpenTask: (task: TaskTarget) => void;
 }
 
-function LinkedWorkRail({ taskIds, tasks, onChange, onOpenTask }: LinkedWorkProps) {
-  const linked = resolveTasks(taskIds, tasks);
-
-  return (
-    <aside className="border-border-default bg-surface-column hidden min-h-0 flex-col border-l 2xl:flex">
-      <div className="border-border-subtle flex h-11 shrink-0 items-center gap-2 border-b px-3">
-        <Link2 size={13} aria-hidden className="text-fg-secondary" />
-        <h2 className="text-fg-primary text-xs font-medium">Links</h2>
-      </div>
-      <div className="border-border-subtle border-b px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-fg-secondary font-mono text-[9px] font-medium tracking-[0.1em] uppercase">
-            Linked tasks
-          </p>
-          <TaskLinkMenu taskIds={taskIds} tasks={tasks} onChange={onChange} />
-        </div>
-
-        {linked.length === 0 ? null : (
-          <p className="text-fg-secondary mt-2 text-2xs">
-            {String(linked.length)} {linked.length === 1 ? "reference" : "references"}
-          </p>
-        )}
-      </div>
-
-      <ol aria-label="Tasks linked to this note" className="min-h-0 overflow-y-auto">
-        {linked.length === 0 ? (
-          <li className="px-4 py-5">
-            <p className="text-fg-secondary text-xs">No linked tasks.</p>
-            <p className="text-fg-secondary mt-1 text-2xs leading-relaxed">
-              Link work to keep its status visible beside the note.
-            </p>
-          </li>
-        ) : (
-          linked.map((task, index) => {
-            const taskId = taskIds[index];
-            if (task === null) {
-              return (
-                <li key={taskId} className="border-border-subtle border-b px-4 py-3">
-                  <p className="text-fg-secondary text-xs">Archived or unavailable task</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChange(taskIds.filter((id) => id !== taskId));
-                    }}
-                    className="text-danger-fg mt-1 cursor-default text-2xs underline"
-                  >
-                    Remove reference
-                  </button>
-                </li>
-              );
-            }
-
-            return (
-              <li key={task.id} className="border-border-subtle group border-b px-4 py-3">
-                <div className="flex items-start gap-2.5">
-                  <span
-                    aria-hidden
-                    className="bg-accent-solid mt-1.5 size-1.5 shrink-0 rounded-full"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenTask(task);
-                    }}
-                    className="min-w-0 flex-1 cursor-default text-left"
-                  >
-                    <span className="text-accent-fg block font-mono text-[9px] tracking-[0.06em] uppercase">
-                      {task.reference}
-                    </span>
-                    <span className="text-fg-primary mt-0.5 block text-xs font-medium leading-snug">
-                      {task.title}
-                    </span>
-                    <span className="text-fg-secondary mt-1 block truncate text-[10px]">
-                      {task.columnName} · {task.boardName}
-                      {task.archived ? " · archived" : ""}
-                    </span>
-                  </button>
-                  <IconButton
-                    label={`Unlink ${task.reference}`}
-                    onClick={() => {
-                      onChange(taskIds.filter((id) => id !== task.id));
-                    }}
-                    className="size-6 opacity-70 group-hover:opacity-100"
-                  >
-                    <Unlink size={12} aria-hidden />
-                  </IconButton>
-                </div>
-              </li>
-            );
-          })
-        )}
-      </ol>
-    </aside>
-  );
-}
-
 function TaskLinkMenu({
   taskIds,
   tasks,
   onChange,
+  label,
 }: {
   taskIds: string[];
   tasks: TaskContext[];
   onChange: (ids: string[]) => void;
+  label: string;
 }) {
   return (
     <DropdownMenu.Root>
@@ -818,8 +741,8 @@ function TaskLinkMenu({
           aria-label="Link tasks to this note"
           className="text-fg-secondary hover:bg-surface-sunken hover:text-fg-primary focus-visible:outline-focus-ring inline-flex h-7 shrink-0 cursor-default items-center gap-1.5 rounded-md px-2 text-2xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
         >
-          <Plus size={12} aria-hidden />
-          Add task
+          <Link2 size={12} aria-hidden />
+          {label}
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

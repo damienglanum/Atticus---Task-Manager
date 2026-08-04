@@ -1,3 +1,4 @@
+import type { ColorPalette } from "@/lib/bindings/ColorPalette";
 import type { ResolvedTheme } from "@/lib/bindings/ResolvedTheme";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
 
@@ -19,6 +20,21 @@ import type { ThemePreference } from "@/lib/bindings/ThemePreference";
 export type { ResolvedTheme };
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
+const COLOR_PALETTES = [
+  "atticus",
+  "green-twilight",
+  "wisteria-prussian",
+  "violet-linen",
+  "parchment-coral",
+  "custard-pine",
+  "laser-gold",
+] as const satisfies readonly ColorPalette[];
+
+export function applyColorPalette(palette: ColorPalette): void {
+  const root = document.documentElement;
+  root.classList.remove(...COLOR_PALETTES.map((name) => `palette-${name}`));
+  root.classList.add(`palette-${palette}`);
+}
 
 export function resolveSystemTheme(): ResolvedTheme {
   return window.matchMedia(DARK_QUERY).matches ? "dark" : "light";

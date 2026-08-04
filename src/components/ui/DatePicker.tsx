@@ -295,7 +295,7 @@ export function DatePicker({
                           className={cn(
                             "relative mx-auto flex size-7 cursor-default items-center justify-center rounded-sm font-mono text-xs",
                             selected
-                              ? "bg-accent-solid text-on-solid font-semibold"
+                              ? "bg-accent-solid text-on-accent-solid font-semibold"
                               : outside
                                 ? "text-fg-secondary opacity-55 hover:bg-surface-sunken hover:opacity-100"
                                 : "text-fg-primary hover:bg-surface-sunken",

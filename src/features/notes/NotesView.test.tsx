@@ -1,12 +1,16 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IDLE_PREVIEW_DELAY_MS } from "@/components/ui/useIdlePreview";
+import type { Board } from "@/lib/bindings/Board";
+import type { BoardSnapshot } from "@/lib/bindings/BoardSnapshot";
 import type { Note } from "@/lib/bindings/Note";
 import { ipc } from "@/lib/ipc";
 import { renderWithProviders } from "@/test/render";
 
 import { NotesView } from "./NotesView";
+import type { TaskTarget } from "./taskContexts";
 
 vi.mock("@/lib/ipc", () => ({
   ipc: {
@@ -23,6 +27,8 @@ vi.mock("@/lib/ipc", () => ({
 const notesList = vi.mocked(ipc.notesList);
 const noteCreate = vi.mocked(ipc.noteCreate);
 const noteUpdate = vi.mocked(ipc.noteUpdate);
+const boardLoad = vi.mocked(ipc.boardLoad);
+const boardArchivedTasks = vi.mocked(ipc.boardArchivedTasks);
 
 const NOTE: Note = {
   id: "n1",
@@ -35,14 +41,65 @@ const NOTE: Note = {
   updatedAt: 0,
 };
 
-function renderNotes() {
+const BOARD: Board = {
+  id: "b1",
+  projectId: "p1",
+  name: "Roadmap",
+  position: 0,
+  createdAt: 0,
+  updatedAt: 0,
+};
+
+const BOARD_WITH_TASK: BoardSnapshot = {
+  boardId: "b1",
+  columns: [
+    {
+      id: "doing",
+      boardId: "b1",
+      name: "In Progress",
+      wipLimit: null,
+      position: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    },
+  ],
+  tasks: [
+    {
+      id: "t1",
+      projectId: "p1",
+      boardId: "b1",
+      columnId: "doing",
+      number: 7,
+      title: "Make linked work useful",
+      description: "",
+      priority: 0,
+      dueDate: null,
+      estimateMinutes: null,
+      position: 0,
+      archivedAt: null,
+      createdAt: 0,
+      updatedAt: 0,
+      subtaskCount: 0,
+      subtasksDone: 0,
+      labelIds: [],
+      hasMissingFile: false,
+    },
+  ],
+  labels: [],
+  archivedCount: 0,
+};
+
+function renderNotes({
+  boards = [],
+  onOpenTask = () => undefined,
+}: { boards?: Board[]; onOpenTask?: (task: TaskTarget) => void } = {}) {
   return renderWithProviders(
     <NotesView
       projectId="p1"
       projectName="Atticus"
       projectKeyPrefix="ATT"
-      boards={[]}
-      onOpenTask={vi.fn()}
+      boards={boards}
+      onOpenTask={onOpenTask}
     />,
   );
 }
@@ -68,6 +125,8 @@ beforeEach(() => {
       updatedAt: 1,
     }),
   );
+  boardLoad.mockResolvedValue(structuredClone(BOARD_WITH_TASK));
+  boardArchivedTasks.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -145,6 +204,31 @@ describe("NotesView", () => {
 
     expect(screen.getByText("Save failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("keeps task linking in the note properties and opens a linked task", async () => {
+    const user = userEvent.setup();
+    const onOpenTask = vi.fn();
+    notesList.mockResolvedValue([{ ...NOTE, taskIds: ["t1"] }]);
+    renderNotes({ boards: [BOARD], onOpenTask });
+
+    const linkedTask = await screen.findByRole("button", {
+      name: "Open ATT-7: Make linked work useful",
+    });
+    expect(screen.queryByRole("heading", { name: "Links" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Tasks linked to this note" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(linkedTask);
+    expect(onOpenTask).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ id: "t1", boardId: "b1", projectId: "p1" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Link tasks to this note" }));
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: /Make linked work useful/ }),
+    ).toHaveAttribute("aria-checked", "true");
   });
 });
 

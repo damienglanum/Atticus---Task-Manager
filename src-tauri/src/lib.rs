@@ -92,6 +92,7 @@ pub fn run() {
             commands::transfer::backup_restore,
             commands::preferences::preferences_get,
             commands::preferences::preferences_set_theme,
+            commands::preferences::preferences_set_color_palette,
             commands::preferences::window_set_theme,
             commands::preferences::ui_state_get,
             commands::preferences::ui_state_set,

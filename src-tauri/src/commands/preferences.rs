@@ -7,6 +7,7 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
 const THEME_KEY: &str = "theme";
+const COLOR_PALETTE_KEY: &str = "color-palette";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -15,6 +16,24 @@ pub enum ThemePreference {
     Light,
     Dark,
     System,
+}
+
+/// The colour pair used for Atticus's chrome and interactive accents.
+///
+/// Kept separate from `ThemePreference`: a palette does not decide whether the
+/// workspace is light or dark. Every palette supplies a measured treatment for
+/// both, including when the brightness follows the operating system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export, export_to = "ColorPalette.ts")]
+pub enum ColorPalette {
+    Atticus,
+    GreenTwilight,
+    WisteriaPrussian,
+    VioletLinen,
+    ParchmentCoral,
+    CustardPine,
+    LaserGold,
 }
 
 /// A preference with "system" already decided.
@@ -45,12 +64,21 @@ impl From<ResolvedTheme> for tauri::Theme {
 #[ts(export, export_to = "Preferences.ts")]
 pub struct Preferences {
     pub theme: ThemePreference,
+    pub color_palette: ColorPalette,
 }
 
 fn read_preferences(state: &AppState) -> AppResult<Preferences> {
     let database = state.database()?;
     let theme = app_state::get_or(database.connection(), THEME_KEY, ThemePreference::System)?;
-    Ok(Preferences { theme })
+    let color_palette = app_state::get_or(
+        database.connection(),
+        COLOR_PALETTE_KEY,
+        ColorPalette::Atticus,
+    )?;
+    Ok(Preferences {
+        theme,
+        color_palette,
+    })
 }
 
 #[tauri::command]
@@ -65,6 +93,17 @@ pub fn preferences_set_theme(
 ) -> AppResult<Preferences> {
     let database = state.database()?;
     app_state::set(database.connection(), THEME_KEY, &theme)?;
+    drop(database);
+    read_preferences(&state)
+}
+
+#[tauri::command]
+pub fn preferences_set_color_palette(
+    state: State<'_, AppState>,
+    color_palette: ColorPalette,
+) -> AppResult<Preferences> {
+    let database = state.database()?;
+    app_state::set(database.connection(), COLOR_PALETTE_KEY, &color_palette)?;
     drop(database);
     read_preferences(&state)
 }
@@ -159,6 +198,17 @@ mod tests {
     }
 
     #[test]
+    fn the_colour_palette_defaults_to_atticus() {
+        let db = Database::open_in_memory().expect("database opens");
+
+        let palette: ColorPalette =
+            app_state::get_or(db.connection(), COLOR_PALETTE_KEY, ColorPalette::Atticus)
+                .expect("read should succeed");
+
+        assert_eq!(palette, ColorPalette::Atticus);
+    }
+
+    #[test]
     fn a_chosen_theme_survives_a_reopen_of_the_same_file() {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join(crate::db::DATABASE_FILE_NAME);
@@ -179,5 +229,31 @@ mod tests {
             ThemePreference::Dark,
             "the preference must survive a restart"
         );
+    }
+
+    #[test]
+    fn a_chosen_colour_palette_survives_a_reopen_of_the_same_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join(crate::db::DATABASE_FILE_NAME);
+
+        {
+            let db = Database::open(&path).expect("database opens");
+            app_state::set(
+                db.connection(),
+                COLOR_PALETTE_KEY,
+                &ColorPalette::CustardPine,
+            )
+            .expect("write should succeed");
+        }
+
+        let reopened = Database::open(&path).expect("database reopens");
+        let palette: ColorPalette = app_state::get_or(
+            reopened.connection(),
+            COLOR_PALETTE_KEY,
+            ColorPalette::Atticus,
+        )
+        .expect("read should succeed");
+
+        assert_eq!(palette, ColorPalette::CustardPine);
     }
 }

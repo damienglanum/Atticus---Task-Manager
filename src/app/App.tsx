@@ -44,6 +44,7 @@ import { useShortcuts } from "./useShortcuts";
 import { useUndoAcrossApp } from "./useUndoAcrossApp";
 import { useMcpChanges } from "./useMcpChanges";
 import type { Board } from "@/lib/bindings/Board";
+import type { ColorPalette } from "@/lib/bindings/ColorPalette";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
 import type { UpdateStatus } from "@/lib/bindings/UpdateStatus";
@@ -53,7 +54,7 @@ import { ipc } from "@/lib/ipc";
 import { queryKeys } from "@/lib/query/keys";
 import type { ProjectFormValues } from "@/lib/schemas";
 import { notifyError } from "./toast";
-import { applyThemePreference } from "./theme";
+import { applyColorPalette, applyThemePreference } from "./theme";
 
 type ProjectDialogState =
   { mode: "closed" } | { mode: "create" } | { mode: "edit"; project: Project };
@@ -77,6 +78,10 @@ export function App() {
     queryFn: () => ipc.preferencesGet(),
   });
   const theme: ThemePreference = preferences.data?.theme ?? "system";
+  const colorPalette: ColorPalette = preferences.data?.colorPalette ?? "atticus";
+  useEffect(() => {
+    applyColorPalette(colorPalette);
+  }, [colorPalette]);
   useEffect(
     () =>
       applyThemePreference(theme, (resolved) => {
@@ -95,6 +100,16 @@ export function App() {
     },
     onError: (error: unknown) => {
       notifyError(`Couldn't save the theme. ${describeAppError(toAppError(error))}`);
+    },
+  });
+
+  const setColorPalette = useMutation({
+    mutationFn: (next: ColorPalette) => ipc.preferencesSetColorPalette(next),
+    onSuccess: (updated) => {
+      client.setQueryData(queryKeys.preferences(), updated);
+    },
+    onError: (error: unknown) => {
+      notifyError(`Couldn't save the colour style. ${describeAppError(toAppError(error))}`);
     },
   });
 
@@ -646,6 +661,11 @@ export function App() {
           setTheme.mutate(next);
         }}
         themePending={setTheme.isPending}
+        colorPalette={colorPalette}
+        onColorPaletteChange={(next) => {
+          setColorPalette.mutate(next);
+        }}
+        colorPalettePending={setColorPalette.isPending}
         projects={active}
         onDataReplaced={() => {
           // An import or a restore replaces the ids the workspace points at, so

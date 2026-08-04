@@ -136,9 +136,11 @@
        light cyan 11 measures 4.19:1 and 4.26:1 — both short. Pinned one step
        darker, to 5.45:1 at worst. Dark cyan 11 has no such problem (7.62:1 at
        worst) and is used unpinned below. */
-  /* The label on a solid fill. A token rather than `text-white` at each call
-     site so `contrast.test.ts` measures the value the buttons actually use. */
+  /* Labels on solid fills. Accent palettes sometimes reverse a light/dark pair,
+     while status solids deliberately retain white labels. Keeping the roles
+     separate lets both be measured rather than assuming one label fits all. */
   --color-on-solid: #ffffff;
+  --color-on-accent-solid: #ffffff;
   --color-accent-solid: #00779e;
   --color-accent-fg: #0b6a80;
   --color-accent-bg: var(--cyan-3);
@@ -197,6 +199,108 @@
   --color-warning-fg: var(--amber-11);
 }
 
+/* ── User-selectable colour styles ──────────────────────────────────────────
+   Brightness and colour are independent preferences. The neutral surface ramp
+   above remains quiet and proven; these pairs own the app's interactive colour
+   without turning every board column into a saturated panel. Five pairs reverse
+   naturally in dark mode. Coral needs a darker reading step because the two
+   supplied anchors are only 3.07:1 against one another. */
+.palette-green-twilight {
+  --color-accent-fg: #04045e;
+  --color-accent-bg: #b9fa3c;
+  --color-accent-solid: #04045e;
+  --color-on-accent-solid: #b9fa3c;
+  --color-accent-border: #04045e;
+}
+
+.dark.palette-green-twilight {
+  --color-accent-fg: #b9fa3c;
+  --color-accent-bg: #04045e;
+  --color-accent-solid: #b9fa3c;
+  --color-on-accent-solid: #04045e;
+  --color-accent-border: #b9fa3c;
+}
+
+.palette-wisteria-prussian {
+  --color-accent-fg: #0c0829;
+  --color-accent-bg: #8fa0d8;
+  --color-accent-solid: #0c0829;
+  --color-on-accent-solid: #8fa0d8;
+  --color-accent-border: #0c0829;
+}
+
+.dark.palette-wisteria-prussian {
+  --color-accent-fg: #8fa0d8;
+  --color-accent-bg: #0c0829;
+  --color-accent-solid: #8fa0d8;
+  --color-on-accent-solid: #0c0829;
+  --color-accent-border: #8fa0d8;
+}
+
+.palette-violet-linen {
+  --color-accent-fg: #371931;
+  --color-accent-bg: #fff3e5;
+  --color-accent-solid: #371931;
+  --color-on-accent-solid: #fff3e5;
+  --color-accent-border: #371931;
+}
+
+.dark.palette-violet-linen {
+  --color-accent-fg: #fff3e5;
+  --color-accent-bg: #371931;
+  --color-accent-solid: #fff3e5;
+  --color-on-accent-solid: #371931;
+  --color-accent-border: #fff3e5;
+}
+
+.palette-parchment-coral {
+  --color-accent-fg: #a52d2f;
+  --color-accent-bg: #faf5ef;
+  --color-accent-solid: #ec5e5a;
+  --color-on-accent-solid: #301314;
+  --color-accent-border: #e4514e;
+}
+
+.dark.palette-parchment-coral {
+  --color-accent-fg: #faf5ef;
+  --color-accent-bg: #4a1b1c;
+  --color-accent-solid: #ec5e5a;
+  --color-on-accent-solid: #301314;
+  --color-accent-border: #ec5e5a;
+}
+
+.palette-custard-pine {
+  --color-accent-fg: #013e37;
+  --color-accent-bg: #ffefb3;
+  --color-accent-solid: #013e37;
+  --color-on-accent-solid: #ffefb3;
+  --color-accent-border: #013e37;
+}
+
+.dark.palette-custard-pine {
+  --color-accent-fg: #ffefb3;
+  --color-accent-bg: #013e37;
+  --color-accent-solid: #ffefb3;
+  --color-on-accent-solid: #013e37;
+  --color-accent-border: #ffefb3;
+}
+
+.palette-laser-gold {
+  --color-accent-fg: #070d0d;
+  --color-accent-bg: #f0ede4;
+  --color-accent-solid: #070d0d;
+  --color-on-accent-solid: #f0ede4;
+  --color-accent-border: #070d0d;
+}
+
+.dark.palette-laser-gold {
+  --color-accent-fg: #f0ede4;
+  --color-accent-bg: #070d0d;
+  --color-accent-solid: #f0ede4;
+  --color-on-accent-solid: #070d0d;
+  --color-accent-border: #f0ede4;
+}
+
 @theme {
   /* ── Focus ring — one ring, used identically everywhere ───────────────────
      The accent's text step, not its solid. The ring has to clear 3:1 against
@@ -215,15 +319,15 @@
   --color-base-300: var(--color-surface-sunken);
   --color-base-content: var(--color-fg-primary);
   --color-primary: var(--color-accent-solid);
-  --color-primary-content: var(--color-on-solid);
+  --color-primary-content: var(--color-on-accent-solid);
   --color-secondary: var(--color-accent-fg);
-  --color-secondary-content: var(--color-on-solid);
+  --color-secondary-content: var(--color-on-accent-solid);
   --color-accent: var(--color-accent-fg);
-  --color-accent-content: var(--color-on-solid);
+  --color-accent-content: var(--color-on-accent-solid);
   --color-neutral: var(--color-fg-secondary);
   --color-neutral-content: var(--color-surface-card);
   --color-info: var(--color-accent-fg);
-  --color-info-content: var(--color-on-solid);
+  --color-info-content: var(--color-on-accent-solid);
   --color-warning: var(--color-warning-fg);
   --color-warning-content: var(--color-warning-bg);
   --color-error: var(--color-danger-solid);

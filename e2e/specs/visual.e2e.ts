@@ -394,7 +394,7 @@ describe("visual review", () => {
       "# Objective\n\nMake every movement route feel like one coherent system.\n\n## Working agreement\n\n- Pointer, keyboard, and menu actions share the same transaction.\n- Focus returns to the task after every move.\n\n## Verification\n\n- [x] Board read model\n- [ ] Keyboard announcement pass",
     );
 
-    await openMenuAt('aside button[aria-label="Link tasks to this note"]');
+    await openMenuAt('button[aria-label="Link tasks to this note"]');
     const linkedTask = $(
       '//*[@role="menuitemcheckbox"][contains(., "Accessible keyboard drag-and-drop")]',
     );

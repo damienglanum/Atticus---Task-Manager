@@ -54,6 +54,7 @@ describe("SettingsDialog", () => {
 
   it("separates general, data, and installation settings", async () => {
     const user = userEvent.setup();
+    const onColorPaletteChange = vi.fn();
     renderWithProviders(
       <SettingsDialog
         open
@@ -61,6 +62,9 @@ describe("SettingsDialog", () => {
         theme="system"
         onThemeChange={vi.fn()}
         themePending={false}
+        colorPalette="atticus"
+        onColorPaletteChange={onColorPaletteChange}
+        colorPalettePending={false}
         projects={[]}
         onDataReplaced={vi.fn()}
       />,
@@ -68,6 +72,10 @@ describe("SettingsDialog", () => {
 
     expect(screen.getByRole("button", { name: "General" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByText("Appearance")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Atticus original/ })).toBeChecked();
+
+    await user.click(screen.getByRole("radio", { name: /Wisteria Blue · Prussian Blue/ }));
+    expect(onColorPaletteChange).toHaveBeenCalledExactlyOnceWith("wisteria-prussian");
 
     await user.click(screen.getByRole("button", { name: "Data" }));
     expect(screen.getByText("Export and import")).toBeInTheDocument();

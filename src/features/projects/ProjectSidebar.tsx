@@ -542,13 +542,6 @@ function ProjectBranch({
         >
           <span
             aria-hidden
-            className={cn(
-              "absolute inset-y-1 left-0 w-0.5 rounded-r-full",
-              activeDestination === null ? "bg-transparent" : "bg-accent-solid",
-            )}
-          />
-          <span
-            aria-hidden
             className="flex size-7 items-center justify-center rounded-md border text-xs font-semibold"
             style={{
               borderColor: colorVariable(project.color),

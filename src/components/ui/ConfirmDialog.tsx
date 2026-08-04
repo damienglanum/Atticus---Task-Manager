@@ -69,8 +69,8 @@ export function ConfirmDialog({
               disabled={confirmDisabled}
               onClick={onConfirm}
               className={cn(
-                "inline-flex h-8 cursor-default items-center rounded-md border border-transparent px-3 text-xs font-medium text-white",
-                destructive ? "bg-danger-solid" : "bg-accent-solid",
+                "inline-flex h-8 cursor-default items-center rounded-md border border-transparent px-3 text-xs font-medium",
+                destructive ? "bg-danger-solid text-white" : "bg-accent-solid text-on-accent-solid",
                 "hover:opacity-90 disabled:pointer-events-none disabled:opacity-50",
               )}
             >

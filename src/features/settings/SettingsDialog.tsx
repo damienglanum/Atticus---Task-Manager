@@ -7,6 +7,7 @@ import { notify, notifyError } from "@/app/toast";
 import { BlurFade } from "@/components/magicui/BlurFade";
 import { Button } from "@/components/ui/Button";
 import { DialogPage } from "@/components/ui/Dialog";
+import type { ColorPalette } from "@/lib/bindings/ColorPalette";
 import type { Project } from "@/lib/bindings/Project";
 import type { ThemePreference } from "@/lib/bindings/ThemePreference";
 import { cn } from "@/lib/cn";
@@ -16,6 +17,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { DataPanel } from "./DataPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { McpPanel } from "./McpPanel";
+import { PaletteControl } from "./PaletteControl";
 import { SettingsBlock, SettingsStatus } from "./SettingsPrimitives";
 import { ThemeControl } from "./ThemeControl";
 
@@ -25,6 +27,9 @@ interface SettingsDialogProps {
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
   themePending: boolean;
+  colorPalette: ColorPalette;
+  onColorPaletteChange: (palette: ColorPalette) => void;
+  colorPalettePending: boolean;
   projects: Project[];
   /** Called after an import or restore, which replaces everything on screen. */
   onDataReplaced: () => void;
@@ -75,6 +80,9 @@ export function SettingsDialog({
   theme,
   onThemeChange,
   themePending,
+  colorPalette,
+  onColorPaletteChange,
+  colorPalettePending,
   projects,
   onDataReplaced,
 }: SettingsDialogProps) {
@@ -209,9 +217,26 @@ export function SettingsDialog({
                   <SettingsBlock
                     marker="01"
                     title="Appearance"
-                    description="Choose a light or dark workspace, or keep Atticus in step with macOS."
+                    description="Choose the workspace brightness and the colour pair used throughout Atticus."
                   >
-                    <ThemeControl value={theme} onChange={onThemeChange} busy={themePending} />
+                    <div className="space-y-6">
+                      <div>
+                        <p className="text-fg-secondary mb-2 font-mono text-[9px] tracking-[0.1em] uppercase">
+                          Brightness
+                        </p>
+                        <ThemeControl value={theme} onChange={onThemeChange} busy={themePending} />
+                      </div>
+                      <div className="border-border-subtle border-t pt-5">
+                        <p className="text-fg-secondary mb-2 font-mono text-[9px] tracking-[0.1em] uppercase">
+                          Colour style
+                        </p>
+                        <PaletteControl
+                          value={colorPalette}
+                          onChange={onColorPaletteChange}
+                          busy={colorPalettePending}
+                        />
+                      </div>
+                    </div>
                   </SettingsBlock>
 
                   <SettingsBlock

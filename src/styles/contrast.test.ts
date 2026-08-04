@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import type { ColorPalette } from "@/lib/bindings/ColorPalette";
 import {
   colorOf,
   contrastRatio,
@@ -32,6 +33,14 @@ function sourceFiles(directory: string): string[] {
 }
 
 const THEMES: Theme[] = ["light", "dark"];
+const CUSTOM_PALETTES = [
+  "green-twilight",
+  "wisteria-prussian",
+  "violet-linen",
+  "parchment-coral",
+  "custard-pine",
+  "laser-gold",
+] as const satisfies readonly ColorPalette[];
 
 /** Every surface text is allowed to sit on. */
 const SURFACES = [
@@ -165,15 +174,103 @@ describe.each(THEMES)("text contrast — %s theme", (theme) => {
     }
   });
 
-  it("keeps the white label on a solid button readable", () => {
-    const rows: [string, number][] = ["--color-accent-solid", "--color-danger-solid"].map(
-      (solid) => [`#ffffff on ${solid}`, tokenContrast("--color-on-solid", solid, theme)],
-    );
+  it("keeps labels on solid buttons readable", () => {
+    const rows: [string, number][] = [
+      [
+        "--color-on-accent-solid on --color-accent-solid",
+        tokenContrast("--color-on-accent-solid", "--color-accent-solid", theme),
+      ],
+      [
+        "--color-on-solid on --color-danger-solid",
+        tokenContrast("--color-on-solid", "--color-danger-solid", theme),
+      ],
+    ];
     report(rows);
 
     for (const [label, ratio] of rows) {
       expect(ratio, label).toBeGreaterThanOrEqual(TEXT);
     }
+  });
+});
+
+describe.each(CUSTOM_PALETTES)("custom accent palette — %s", (colorPalette) => {
+  describe.each(THEMES)("%s theme", (theme) => {
+    it("keeps accent text readable on its tint and every neutral surface", () => {
+      const rows: [string, number][] = [
+        [
+          "--color-accent-fg on --color-accent-bg",
+          tokenContrast("--color-accent-fg", "--color-accent-bg", theme, colorPalette),
+        ],
+        ...SURFACES.map(
+          (surface) =>
+            [
+              `--color-accent-fg on ${surface}`,
+              tokenContrast("--color-accent-fg", surface, theme, colorPalette),
+            ] as [string, number],
+        ),
+      ];
+      report(rows);
+
+      for (const [label, ratio] of rows) {
+        expect(ratio, `${colorPalette}: ${label}`).toBeGreaterThanOrEqual(TEXT);
+      }
+    });
+
+    it("keeps the label on a solid accent readable", () => {
+      const ratio = tokenContrast(
+        "--color-on-accent-solid",
+        "--color-accent-solid",
+        theme,
+        colorPalette,
+      );
+      report([["accent label on solid", ratio]]);
+
+      expect(ratio).toBeGreaterThanOrEqual(TEXT);
+    });
+
+    it("keeps focus and accent boundaries visible", () => {
+      const adjacent = ["--color-accent-bg", ...SURFACES] as const;
+      const rows: [string, number][] = adjacent.flatMap((surface) => [
+        [
+          `--color-focus-ring on ${surface}`,
+          tokenContrast("--color-focus-ring", surface, theme, colorPalette),
+        ],
+        [
+          `--color-accent-border on ${surface}`,
+          tokenContrast("--color-accent-border", surface, theme, colorPalette),
+        ],
+      ]);
+      report(rows);
+
+      for (const [label, ratio] of rows) {
+        expect(ratio, `${colorPalette}: ${label}`).toBeGreaterThanOrEqual(NON_TEXT);
+      }
+    });
+  });
+});
+
+describe("the supplied colour anchors", () => {
+  it.each([
+    ["green-twilight", "#b9fa3c", "#04045e"],
+    ["wisteria-prussian", "#8fa0d8", "#0c0829"],
+    ["violet-linen", "#fff3e5", "#371931"],
+    ["parchment-coral", "#faf5ef", "#ec5e5a"],
+    ["custard-pine", "#ffefb3", "#013e37"],
+    ["laser-gold", "#f0ede4", "#070d0d"],
+  ] as const)("ships %s with both requested anchors", (colorPalette, light, dark) => {
+    const shipped = new Set([
+      colorOf("--color-accent-fg", "light", colorPalette),
+      colorOf("--color-accent-bg", "light", colorPalette),
+      colorOf("--color-accent-solid", "light", colorPalette),
+      colorOf("--color-on-accent-solid", "light", colorPalette),
+      colorOf("--color-accent-fg", "dark", colorPalette),
+      colorOf("--color-accent-bg", "dark", colorPalette),
+      colorOf("--color-accent-solid", "dark", colorPalette),
+      colorOf("--color-on-accent-solid", "dark", colorPalette),
+    ]);
+
+    expect(shipped).toContain(light);
+    expect(shipped).toContain(dark);
   });
 });
 
